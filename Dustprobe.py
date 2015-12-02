@@ -42,7 +42,18 @@ from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe
 DEFAULT_MgrSERIALPORT   = '/dev/ttyUSB3'
 mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 
-#============================ helper functions ================================
+#============================ functions =======================================
+
+#----------------------------------------------------
+# find_connected_devices(mymanager):
+#     - The point of this function is to scan for
+#       all connected USB devices and recognize the
+#       Dust Managers
+#     - This should be platform independent
+#     - TODO: Scanning should be implemented by
+#       listening to com/tty ports instead of writing
+#----------------------------------------------------
+
 def find_connected_devices(mymanager):
     """ Lists serial port names
         :raises EnvironmentError:
@@ -50,6 +61,7 @@ def find_connected_devices(mymanager):
         :returns:
             A list of the serial ports available on the system
     """
+    # All platform Support
     if sys.platform.startswith('win'):
         ports = ['COM%s' % (i + 1) for i in range(256)]
 
@@ -65,12 +77,22 @@ def find_connected_devices(mymanager):
     print "Scannining for avaible networks ..."
     result = []
     port_cntr = 0
+    return result
+    # This part needs to be changed
+    # At this point I will hard code the port name
+    # and will not scan com ports
+    """
     for port in ports:
         try:
-    #        print port
-            s = serial.Serial(port)
+            print port
+            s = serial.Serial(DEFAULT_MgrSERIALPORT, 9600 ,timeout=3)
             s.close()
+            while (True):
+                print "test"
+                hello = s.readline().decode()
+                print hello
             port_cntr = port_cntr + 1
+            s.close()
             mymanager.connect({'port': port.strip()})
             temp = mymanager.dn_getNetworkConfig()
             print 'Found Network ',port_cntr,' at ', port.strip(),' NetId :', temp.networkId
@@ -79,42 +101,56 @@ def find_connected_devices(mymanager):
         except:
             pass
     print "End of scan "
-    return result
 
+    return result
+    """
+
+#----------------------------------------------------
+# connect_manager_serial( mymanager , ports ):
+#     - This function gets the list of available Dust
+#       managers and gives the user the choise of 
+#       connecting to some or all of them
+#     - TODO: remove the hard coded serialport and
+#       add nessasary changes
+#----------------------------------------------------
 
 def connect_manager_serial( mymanager , ports ):
-    #Function to connect Manager to Serial port
-    for port in ports:
+    # This part checks for the list of available Dust Ports
+    # The Com port is now set to default so no need to go through the list
+    """    for port in ports:
         serialport = port.strip()
 
     if not ports:
         print " No networks connected "
         os._exit(0)
-
+    """
+    serialport = DEFAULT_MgrSERIALPORT # in my set up its /dev/ttyUSB3
     try:
         mymanager.connect({'port': serialport})
         print "connected to manager at : ", serialport
     except Exception as err:
         print('failed to connect to manager at {0}, error ({1})\n{2}'.format(
-            serialport,
-            type(err),
+            serialport ,
+            type(err) ,
             err
         ))
         raw_input('Aborting. Press Enter to close.')
         os._exit(0)
 
+#----------------------------------------------------
+# handle_data(notifName, notifParams):
+#     - This function parses the Health reports recieved
+#     - TODO: the data should be saved for further processing
+#----------------------------------------------------
 def handle_data(notifName, notifParams):
+
     mac        = FormatUtils.formatMacString(notifParams.macAddress)
     hrParser   = HrParser.HrParser()
 
     print "--------------------------- MSG ------------------------ "
-    print mac
-    print mymanager.dn_getNetworkConfig()
-    print notifParams.payload
     hr    = hrParser.parseHr(notifParams.payload)
-    print hrParser.formatHr(hr)
-#    hrReport = '{'+mac+'}\n'+'{'+hrParser.formatHr(hr)+'}'
-    print hr    #Report
+    hrReport = '{'+mac+'}\n'+'{'+hrParser.formatHr(hr)+'}'
+    print hrReport
     print "-------------------------- END MSG --------------------- "
 
 #============================ main ============================================
@@ -124,7 +160,7 @@ print( '===================================================\n')
 #===== connect to the manager
 
 ports = find_connected_devices(mymanager)
-
+ports = "/dev/ttyUSB3"
 connect_manager_serial(mymanager, ports)
 
 # subscribe to data notifications
@@ -138,18 +174,10 @@ subscriber.subscribe(
     fun =           handle_data,
     isRlbl =        False,
 )
-#subscriber.subscribe(
-#    notifTypes =    [
-#        IpMgrSubscribe.IpMgrSubscribe.ERROR,
-#        IpMgrSubscribe.IpMgrSubscribe.FINISH,
-#    ],
-#    fun =           self.disconnectedCallback,
-#    isRlbl =        True,
-#    )
 
-raw_input("hit any key to quit\n")
-mymanager.disconnect()
-os._exit(0)
+#raw_input("hit any key to quit\n")
+#mymanager.disconnect()
+#os._exit(0)
 
 
 
