@@ -74,36 +74,35 @@ def find_connected_devices(mymanager):
     else:
         raise EnvironmentError('Unsupported platform')
 
-    print "Scannining for avaible networks ..."
+    print "Scanning for available networks ..."
     result = []
     port_cntr = 0
-    return result
     # This part needs to be changed
     # At this point I will hard code the port name
     # and will not scan com ports
-    """
     for port in ports:
+        print (port)
         try:
-            print port
-            s = serial.Serial(DEFAULT_MgrSERIALPORT, 9600 ,timeout=3)
-            s.close()
-            while (True):
-                print "test"
-                hello = s.readline().decode()
-                print hello
-            port_cntr = port_cntr + 1
-            s.close()
-            mymanager.connect({'port': port.strip()})
-            temp = mymanager.dn_getNetworkConfig()
-            print 'Found Network ',port_cntr,' at ', port.strip(),' NetId :', temp.networkId
-            result.append(port)
+            s = serial.Serial(port,
+                baudrate = 9600,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                bytesize=serial.EIGHTBITS,
+                timeout=3)
 
-        except:
+            s.flushOutput()
+            mes = s.read()
+
+            if mes:
+                print("message recieved from port")
+                print(mes.decode('unicode-escape'))
+                result.append(port)
+            s.close()
+        except serial.SerialException as e:
             pass
-    print "End of scan "
-
+        except OSError as e:
+            pass
     return result
-    """
 
 #----------------------------------------------------
 # connect_manager_serial( mymanager , ports ):
@@ -160,8 +159,8 @@ print( '===================================================\n')
 #===== connect to the manager
 
 ports = find_connected_devices(mymanager)
-ports = "/dev/ttyUSB3"
-connect_manager_serial(mymanager, ports)
+port = ports[0]
+connect_manager_serial(mymanager, port)
 
 # subscribe to data notifications
 
