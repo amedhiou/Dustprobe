@@ -172,7 +172,7 @@ subscriber.subscribe(
                         IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                     ],
     fun =           handle_data,
-    isRlbl =        False,
+    isRlbl =        True,
 )
 
 
