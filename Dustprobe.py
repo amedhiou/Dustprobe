@@ -36,7 +36,7 @@ from SmartMeshSDK                       import HrParser
 from SmartMeshSDK                       import sdk_version
 from SmartMeshSDK.ApiDefinition         import IpMgrDefinition
 from SmartMeshSDK.IpMgrConnectorSerial  import IpMgrConnectorSerial
-from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe
+from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 
 #============================ defines =========================================
 DEFAULT_MgrSERIALPORT   = '/dev/ttyUSB3'
@@ -174,6 +174,26 @@ subscriber.subscribe(
     fun =           handle_data,
     isRlbl =        False,
 )
+
+
+currentMac     = (0,0,0,0,0,0,0,0) # start getMoteConfig() iteration with the 0 MAC address
+continueAsking = True
+returnVal = []
+
+
+
+# the bellow subroutine should be done once every 15 minutes
+while continueAsking:
+    try:
+        res = mymanager.dn_getMoteConfig(currentMac,True)
+        print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
+
+    except:
+        continueAsking = False
+    else:
+        if ((not res.isAP) and (res.state in [4,])):
+            returnVal.append(tuple(res.macAddress))
+        currentMac = res.macAddress
 
 #raw_input("hit any key to quit\n")
 #mymanager.disconnect()
