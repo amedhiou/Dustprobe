@@ -96,8 +96,8 @@ def find_connected_devices(mymanager):
             if mes:
                 print("message recieved from port")
                 print(mes.decode('unicode-escape'))
-                ss=":".join("{:02x}".format(ord(c)) for c in mes)
-                print(ss)
+                mes_inhex=":".join("{:02x}".format(ord(c)) for c in mes)
+                print(mes_inhex)
                 result.append(port)
             s.close()
         except serial.SerialException as e:
