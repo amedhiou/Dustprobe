@@ -77,9 +77,9 @@ def find_connected_devices(mymanager):
     print "Scanning for available networks ..."
     result = []
     port_cntr = 0
-    # This part needs to be changed
-    # At this point I will hard code the port name
-    # and will not scan com ports
+
+    # scan the available ports looking for the one(s) sending the HDLC hello message
+    # put these ports in the result array and return that array
     for port in ports:
         print (port)
         try:
@@ -100,6 +100,7 @@ def find_connected_devices(mymanager):
                 print(mes_inhex)
                 result.append(port)
             s.close()
+
         except serial.SerialException as e:
             pass
         except OSError as e:
