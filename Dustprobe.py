@@ -88,14 +88,16 @@ def find_connected_devices(mymanager):
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 bytesize=serial.EIGHTBITS,
-                timeout=3)
+                timeout=2)
 
             s.flushOutput()
-            mes = s.read()
+            mes = s.read(10)
 
             if mes:
                 print("message recieved from port")
                 print(mes.decode('unicode-escape'))
+                ss=":".join("{:02x}".format(ord(c)) for c in mes)
+                print(ss)
                 result.append(port)
             s.close()
         except serial.SerialException as e:
