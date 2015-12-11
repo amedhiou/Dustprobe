@@ -84,9 +84,9 @@ def find_connected_devices(mymanager):
     print "Scanning for available networks ..."
     result = []
     port_cntr = 0
-    # This part needs to be changed
-    # At this point I will hard code the port name
-    # and will not scan com ports
+
+    # scan the available ports looking for the one(s) sending the HDLC hello message
+    # put these ports in the result array and return that array
     for port in ports:
     #    print (port)
         try:
@@ -95,17 +95,25 @@ def find_connected_devices(mymanager):
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
                 bytesize=serial.EIGHTBITS,
-                timeout=3)
+                timeout=2)
 
             s.flushOutput()
-            mes = s.read()
+            mes = s.read(10)
 
             if mes:
+<<<<<<< HEAD
         #        print("message recieved from port")
         #        print mes
                 print "Found new Device at :", port
+=======
+                print("message recieved from port")
+                print(mes.decode('unicode-escape'))
+                mes_inhex=":".join("{:02x}".format(ord(c)) for c in mes)
+                print(mes_inhex)
+>>>>>>> d02cce2f69e53b0bbaf1b19d2715f4824f7cebf7
                 result.append(port)
             s.close()
+
         except serial.SerialException as e:
             pass
         except OSError as e:
