@@ -24,7 +24,7 @@ from SmartMeshSDK import SmsdkInstallVerifier
 if not goodToGo:
     print ("Your installation does not allow this application to run:\n")
     print (reason)
-    input("Press any button to exit")
+    input ("Press any button to exit")
     sys.exit(0)
 
 #============================ imports =========================================
@@ -39,9 +39,16 @@ from SmartMeshSDK.IpMgrConnectorSerial  import IpMgrConnectorSerial
 from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 
 #============================ defines =========================================
-DEFAULT_MgrSERIALPORT   = '/dev/ttyUSB3'
-mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-
+DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
+mymanager                = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager1               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager2               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager3               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager4               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager5               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager6               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager7               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager8               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #============================ functions =======================================
 
 #----------------------------------------------------
@@ -68,7 +75,7 @@ def find_connected_devices(mymanager):
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
         ports = glob.glob('/dev/tty[A-Za-z]*')
 
-    elif sys.platform.startswith('darwin'):
+    elif sys.platform('darwin'):
         ports = glob.glob('/dev/tty.*')
 
     else:
@@ -81,7 +88,7 @@ def find_connected_devices(mymanager):
     # At this point I will hard code the port name
     # and will not scan com ports
     for port in ports:
-        print (port)
+    #    print (port)
         try:
             s = serial.Serial(port,
                 baudrate = 115200,
@@ -94,14 +101,27 @@ def find_connected_devices(mymanager):
             mes = s.read()
 
             if mes:
-                print("message recieved from port")
-                print(mes.decode('unicode-escape'))
+        #        print("message recieved from port")
+        #        print mes
+                print "Found new Device at :", port
                 result.append(port)
             s.close()
         except serial.SerialException as e:
             pass
         except OSError as e:
             pass
+    try:
+        file = open('obj/portList', 'r')
+        print "... Checking connection history:"
+        for line in file:
+            oldPort = line.strip()
+            if oldPort in result:
+                pass
+            else:
+                result.append(oldPort)
+    except:
+        print "No connection history found"
+        pass
     return result
 
 #----------------------------------------------------
@@ -113,7 +133,7 @@ def find_connected_devices(mymanager):
 #       add nessasary changes
 #----------------------------------------------------
 
-def connect_manager_serial( mymanager , ports ):
+def connect_manager_serial( mymanager , port ):
     # This part checks for the list of available Dust Ports
     # The Com port is now set to default so no need to go through the list
     """    for port in ports:
@@ -125,11 +145,11 @@ def connect_manager_serial( mymanager , ports ):
     """
     serialport = DEFAULT_MgrSERIALPORT # in my set up its /dev/ttyUSB3
     try:
-        mymanager.connect({'port': serialport})
-        print "connected to manager at : ", serialport
+        mymanager.connect({'port': port})
+        print "connected to manager at : ", port
     except Exception as err:
         print('failed to connect to manager at {0}, error ({1})\n{2}'.format(
-            serialport ,
+            port ,
             type(err) ,
             err
         ))
@@ -159,20 +179,89 @@ print( '===================================================\n')
 #===== connect to the manager
 
 ports = find_connected_devices(mymanager)
-port = ports[0]
-connect_manager_serial(mymanager, port)
 
-# subscribe to data notifications
+result = []
+port_cntr = 0
 
-subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanager)
-subscriber.start()
-subscriber.subscribe(
-    notifTypes =    [
-                        IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                    ],
-    fun =           handle_data,
-    isRlbl =        True,
-)
+try:
+    # Checking the connectd networks
+    print "Found Networks At :"
+    for port in ports:
+        try:
+            mymanager.connect({'port': port.strip()})
+            res = mymanager.dn_getNetworkConfig()
+            port_cntr = 1 + port_cntr
+            result.append(port.strip())
+            print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
+            mymanager.disconnect()
+
+        except:
+            print "Something wrong happend here !!!!"
+            pass
+except:
+    print "No Connected Dust Devices Found"
+    os._exit(0)
+
+#mymanager.disconnect()
+
+sel = raw_input("Enter the network's number or 'a' to connect to all : \n")
+
+
+if sel == '1':
+    connect_manager_serial(mymanager1, result[port_cntr-1] )
+    # subscribe to data notifications
+    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
+    subscriber.start()
+    subscriber.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                        ],
+        fun =           handle_data,
+        isRlbl =        True,
+    )
+
+if sel == '2':
+    connect_manager_serial(mymanager1,result[port_cntr-2] )
+    # subscribe to data notifications
+    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
+    subscriber.start()
+    subscriber.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                        ],
+        fun =           handle_data,
+        isRlbl =        True,
+    )
+
+if sel == 'a':
+    connect_manager_serial(mymanager1,result[port_cntr-2] )
+    connect_manager_serial(mymanager2,result[port_cntr-1] )
+
+    # subscribe to data notifications
+    subscriber1 = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
+    subscriber2 = IpMgrSubscribe.IpMgrSubscribe(mymanager2)
+
+    subscriber1.start()
+    subscriber2.start()
+
+    subscriber1.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                        ],
+        fun =           handle_data,
+        isRlbl =        True,
+    )
+    subscriber2.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                        ],
+        fun =           handle_data,
+        isRlbl =        True,
+    )
+
+
+raw_input("Enter to EXIT : \n")
+os._exit(0)
 
 
 currentMac     = (0,0,0,0,0,0,0,0) # start getMoteConfig() iteration with the 0 MAC address
