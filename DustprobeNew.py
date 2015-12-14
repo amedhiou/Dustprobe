@@ -227,7 +227,7 @@ def handle_data(notifName, notifParams, mymanager):
         print mac
         print res.moteId
         print str(hr)
-        print type(moteId)
+        
 
         #if a health notification is already in the datafile, remove the ']}' at the end of the file
         #and write a ',' so the json in datafile is formatted properly
