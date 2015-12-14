@@ -244,7 +244,7 @@ def handle_data(notifName, notifParams, mymanager):
             if pos > 0:
                 datafile.seek(pos, os.SEEK_SET)
                 datafile.truncate()
-                write(',\n')
+                datafile.write(',\n')
 
         #write the health report to the datafile
         datafile.write("\n{'TIME':" + str(timestamp) + ",")
