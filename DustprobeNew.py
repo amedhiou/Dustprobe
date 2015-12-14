@@ -8,6 +8,7 @@ import re
 import serial
 import glob
 import time
+import datetime
 
 if __name__ == "__main__":
     here = sys.path[0]
@@ -40,15 +41,17 @@ from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 
 #============================ defines =========================================
 DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
-mymanager                = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager1               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager2               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager3               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager4               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager5               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager6               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager7               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-mymanager8               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+NUMBER_OF_NETWORKS = 3
+mymanagers = []
+for i in range(NUMBER_OF_NETWORKS):
+    mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
+#mymanager3               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+#mymanager4               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+#mymanager5               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+#mymanager6               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+#mymanager7               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+#mymanager8               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+
 #============================ functions =======================================
 
 #----------------------------------------------------
@@ -101,16 +104,13 @@ def find_connected_devices(mymanager):
             mes = s.read(10)
 
             if mes:
-<<<<<<< HEAD
         #        print("message recieved from port")
         #        print mes
                 print "Found new Device at :", port
-=======
                 print("message recieved from port")
                 print(mes.decode('unicode-escape'))
                 mes_inhex=":".join("{:02x}".format(ord(c)) for c in mes)
                 print(mes_inhex)
->>>>>>> d02cce2f69e53b0bbaf1b19d2715f4824f7cebf7
                 result.append(port)
             s.close()
 
@@ -119,17 +119,27 @@ def find_connected_devices(mymanager):
         except OSError as e:
             pass
     try:
-        file = open('obj/portList', 'r')
+        objfile = open('obj/portList', 'r')
         print "... Checking connection history:"
-        for line in file:
+        for line in objfile:
             oldPort = line.strip()
             if oldPort in result:
                 pass
             else:
                 result.append(oldPort)
+        objfile.close()
     except:
         print "No connection history found"
         pass
+
+  
+    objfile = open('obj/portList', 'w')
+
+    for r in result:
+        objfile.write(r)
+
+    objfile.close()
+
     return result
 
 #----------------------------------------------------
@@ -164,21 +174,100 @@ def connect_manager_serial( mymanager , port ):
         raw_input('Aborting. Press Enter to close.')
         os._exit(0)
 
+
+#-----------------------------------------------------
+# data_handlers
+# array of functions to be called by the subscriber on recieveing a health report.
+# This way each subscriber can use the correct manager, which is required for some data
+#-----------------------------------------------------
+def data_handler1(notifName, notifParams):
+    handle_data(notifName,notifParams, mymanagers[0])
+
+def data_handler2(notifName, notifParams):
+    handle_data(notifName,notifParams, mymanagers[1])
+
+data_handlers = [data_handler1,data_handler2]
+
+
 #----------------------------------------------------
 # handle_data(notifName, notifParams):
-#     - This function parses the Health reports recieved
-#     - TODO: the data should be saved for further processing
+#     - This function parses the Health reports recieved and puts the data into a JSON file for upload
+#     - TODO: the data should be sent to the database as soon as it's recieved
 #----------------------------------------------------
-def handle_data(notifName, notifParams):
+firstNotifHandled = False
+def handle_data(notifName, notifParams, mymanager):
+
+    global firstNotifHandled
+    print "Health report recieved"
+    print notifName
+    print notifParams
 
     mac        = FormatUtils.formatMacString(notifParams.macAddress)
     hrParser   = HrParser.HrParser()
-
-    print "--------------------------- MSG ------------------------ "
     hr    = hrParser.parseHr(notifParams.payload)
-    hrReport = '{'+mac+'}\n'+'{'+hrParser.formatHr(hr)+'}'
-    print hrReport
-    print "-------------------------- END MSG --------------------- "
+    timestamp = datetime.datetime.utcnow()
+
+    try:
+        res = mymanager.dn_getMoteConfig(notifParams.macAddress,False)
+        print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
+        moteId = res.moteId
+        isAP   = res.isAP
+        isRouting = res.isRouting
+        state  = res.state
+    except:
+        print "error connecting to mote"
+        moteId = -1
+        isAP   = "unknown"
+        isRouting = "unknown"
+        state  = "unknown"
+        
+    with open('datafile', 'ar+') as datafile:
+        
+        print timestamp
+        print mac
+        print res.moteId
+        print str(hr)
+
+
+        #if a health notification is already in the datafile, remove the ']}' at the end of the file
+        #and write a ',' so the json in datafile is formatted properly
+        print firstNotifHandled
+        if firstNotifHandled:
+    
+            datafile.seek(0, os.SEEK_END)
+            pos = datafile.tell() - 1
+
+            while pos > 0 and datafile.read(1) != "\n":
+                pos -= 1
+                datafile.seek(pos, os.SEEK_SET)
+
+            if pos > 0:
+                datafile.seek(pos, os.SEEK_SET)
+                datafile.truncate()
+                write(',\n')
+
+        #write the health report to the datafile
+        datafile.write('\n{"TIME":"' + str(timestamp) + '",')
+        datafile.write('\n')
+        datafile.write('"MAC" : "' + mac + '",')
+        datafile.write('\n')
+        datafile.write('"moteID" : "' + moteID + '",')
+        datafile.write('\n')
+        datafile.write('"isAP" : "' + isAP + '",')
+        datafile.write('\n')
+        datafile.write('"isRouting" : "' + isRouting + '",')
+        datafile.write('\n')
+        datafile.write('"state" : "' + state + '",')
+        datafile.write('\n')
+        datafile.write(str(hr))
+        datafile.write('}')
+        datafile.write('\n')
+        datafile.write(']}')
+        datafile.write('\n')
+
+        print "health report handled successfully"
+
+    firstNotifHandled = True
 
 #============================ main ============================================
 
@@ -186,22 +275,22 @@ print( '===================================================\n')
 
 #===== connect to the manager
 
-ports = find_connected_devices(mymanager)
+ports = find_connected_devices(mymanagers[0])
 
 result = []
 port_cntr = 0
 
 try:
-    # Checking the connectd networks
+    # Checking the connected networks
     print "Found Networks At :"
     for port in ports:
         try:
-            mymanager.connect({'port': port.strip()})
-            res = mymanager.dn_getNetworkConfig()
+            mymanagers[0].connect({'port': port.strip()})
+            res = mymanagers[0].dn_getNetworkConfig()
             port_cntr = 1 + port_cntr
             result.append(port.strip())
             print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
-            mymanager.disconnect()
+            mymanagers[0].disconnect()
 
         except:
             print "Something wrong happend here !!!!"
@@ -211,62 +300,57 @@ except:
     os._exit(0)
 
 #mymanager.disconnect()
+while(1):
+    sel = raw_input("Enter the network's number or 'a' to connect to all : \n")
+    if sel == 'a':
+        portNum = 'a'
+        break
+    try:
+        portNum = int(sel)
+        if portNum > 0 and portNum <= NUMBER_OF_NETWORKS:
+            break
+        else:
+            print("Please select a number between 1 and " + str(NUMBER_OF_NETWORKS))
+    except ValueError:
+       print("Please select a number between 1 and " + str(NUMBER_OF_NETWORKS))
 
-sel = raw_input("Enter the network's number or 'a' to connect to all : \n")
+#prepare the output file, write the first line of JSON      
+with open('datafile', 'w') as datafile:
+    datafile.write('{"Samples": [')
+    datafile.write('\n')
 
+if portNum == 'a':
 
-if sel == '1':
-    connect_manager_serial(mymanager1, result[port_cntr-1] )
+    subscribers = []
+    for p in range(port_cntr):
+        connect_manager_serial(mymanagers[p],result[p] )
+
+        # subscribe to data notifications
+        subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[p])
+        subscriber.start()
+
+        subscriber1.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                        ],
+        fun =           data_handlers[p],
+        isRlbl =        True,
+        )
+
+        subscribers.append(subscriber)
+
+else:
+    connect_manager_serial(mymanagers[portNum], result[portNum-1] )
     # subscribe to data notifications
-    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
+    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum])
     subscriber.start()
     subscriber.subscribe(
         notifTypes =    [
                             IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                         ],
-        fun =           handle_data,
+        fun =           data_handlers[portNum],
         isRlbl =        True,
     )
-
-if sel == '2':
-    connect_manager_serial(mymanager1,result[port_cntr-2] )
-    # subscribe to data notifications
-    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
-    subscriber.start()
-    subscriber.subscribe(
-        notifTypes =    [
-                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                        ],
-        fun =           handle_data,
-        isRlbl =        True,
-    )
-
-if sel == 'a':
-    connect_manager_serial(mymanager1,result[port_cntr-2] )
-    connect_manager_serial(mymanager2,result[port_cntr-1] )
-
-    # subscribe to data notifications
-    subscriber1 = IpMgrSubscribe.IpMgrSubscribe(mymanager1)
-    subscriber2 = IpMgrSubscribe.IpMgrSubscribe(mymanager2)
-
-    subscriber1.start()
-    subscriber2.start()
-
-    subscriber1.subscribe(
-        notifTypes =    [
-                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                        ],
-        fun =           handle_data,
-        isRlbl =        True,
-    )
-    subscriber2.subscribe(
-        notifTypes =    [
-                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                        ],
-        fun =           handle_data,
-        isRlbl =        True,
-    )
-
 
 raw_input("Enter to EXIT : \n")
 os._exit(0)
@@ -279,9 +363,10 @@ returnVal = []
 
 
 # the bellow subroutine should be done once every 15 minutes
+#
 while continueAsking:
     try:
-        res = mymanager.dn_getMoteConfig(currentMac,True)
+        res = mymanagers[0].dn_getMoteConfig(currentMac,True)
         print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
 
     except:
