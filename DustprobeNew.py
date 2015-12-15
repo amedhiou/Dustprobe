@@ -52,6 +52,9 @@ mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #mymanager7               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #mymanager8               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 
+#============================ Global Variables ================================
+networkIds = []
+
 #============================ functions =======================================
 
 #----------------------------------------------------
@@ -181,15 +184,16 @@ def connect_manager_serial( mymanager , port ):
 # data_handlers
 # array of functions to be called by the subscriber on recieveing a health report.
 # This way each subscriber can use the correct manager, which is required for some data
+# ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
 def data_handler0(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[0])
+    handle_data(notifName,notifParams, mymanagers[0], networkIds[0])
 
 def data_handler1(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[1])
+    handle_data(notifName,notifParams, mymanagers[1], networkIds[1])
 
 def data_handler2(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[2])
+    handle_data(notifName,notifParams, mymanagers[2], networkIds[2])
 
 data_handlers = [data_handler0,data_handler1,data_handler2]
 
@@ -200,12 +204,11 @@ data_handlers = [data_handler0,data_handler1,data_handler2]
 #     - TODO: the data should be sent to the database as soon as it's recieved
 #----------------------------------------------------
 firstNotifHandled = False
-def handle_data(notifName, notifParams, mymanager):
+def handle_data(notifName, notifParams, mymanager, networkId):
 
     global firstNotifHandled
-    print "Health report recieved"
-    print notifName
-    print notifParams
+    print "Health report recieved from network: " + str(networkId)
+
 
     mac        = FormatUtils.formatMacString(notifParams.macAddress)
     hrParser   = HrParser.HrParser()
@@ -229,14 +232,14 @@ def handle_data(notifName, notifParams, mymanager):
     with open('datafile', 'ar+') as datafile:
         
         print timestamp
-        print mac
-        print res.moteId
+        print "mac:" + mac
+        print "moteid: " + str(res.moteId)
+        print "payload: "
         print str(hr)
         
 
         #if a health notification is already in the datafile, remove the ']}' at the end of the file
         #and write a ',' so the json in datafile is formatted properly
-        print firstNotifHandled
         if firstNotifHandled:
     
             datafile.seek(0, os.SEEK_END)
@@ -254,6 +257,8 @@ def handle_data(notifName, notifParams, mymanager):
         #write the health report to the datafile
         datafile.write("\n{'TIME':" + str(timestamp) + ",")
         datafile.write('\n')
+        datafile.write("'networkId' : " + str(networkId) + ",")
+        datafile.write('\n')
         datafile.write("'MAC' : " + mac + ",")
         datafile.write('\n')
         datafile.write("'moteID' : " + str(moteId) + ",")
@@ -270,7 +275,7 @@ def handle_data(notifName, notifParams, mymanager):
         datafile.write(']}')
         datafile.write('\n')
 
-        print "health report handled successfully"
+        print "health report handled successfully and added to datafile"
 
     firstNotifHandled = True
 
@@ -281,7 +286,6 @@ print( '===================================================\n')
 #===== connect to the manager
 
 ports = find_connected_devices(mymanager)
-print ports
 result = []
 port_cntr = 0
 
@@ -294,6 +298,7 @@ try:
             res = mymanager.dn_getNetworkConfig()
             port_cntr = 1 + port_cntr
             result.append(port.strip())
+            networkIds.append(res.networkId)
             print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
             mymanager.disconnect()
 
@@ -340,7 +345,7 @@ if portNum == 'a':
         subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[p])
         subscriber.start()
 
-        subscriber1.subscribe(
+        subscriber.subscribe(
         notifTypes =    [
                             IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                         ],
