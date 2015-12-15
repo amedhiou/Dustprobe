@@ -45,7 +45,7 @@ NUMBER_OF_NETWORKS = 3
 mymanagers = []
 for i in range(NUMBER_OF_NETWORKS):
     mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
-#mymanager3               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #mymanager4               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #mymanager5               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #mymanager6               = IpMgrConnectorSerial.IpMgrConnectorSerial()
@@ -93,6 +93,7 @@ def find_connected_devices(mymanager):
     for port in ports:
     #    print (port)
         try:
+            print port
             s = serial.Serial(port,
                 baudrate = 115200,
                 parity=serial.PARITY_NONE,
@@ -107,10 +108,10 @@ def find_connected_devices(mymanager):
         #        print("message recieved from port")
         #        print mes
                 print "Found new Device at :", port
-                print("message recieved from port")
-                print(mes.decode('unicode-escape'))
+                print "message recieved from port" 
+                #print mes.decode('unicode-escape')
                 mes_inhex=":".join("{:02x}".format(ord(c)) for c in mes)
-                print(mes_inhex)
+                print mes_inhex
                 result.append(port)
             s.close()
 
@@ -133,12 +134,13 @@ def find_connected_devices(mymanager):
         pass
 
   
-    objfile = open('obj/portList', 'w')
+    with open('obj/portList', 'w') as objfile:
 
-    for r in result:
-        objfile.write(r)
+        for r in result:
+            objfile.write(r)
+            objfile.write('\n')
 
-    objfile.close()
+    
 
     return result
 
@@ -180,13 +182,16 @@ def connect_manager_serial( mymanager , port ):
 # array of functions to be called by the subscriber on recieveing a health report.
 # This way each subscriber can use the correct manager, which is required for some data
 #-----------------------------------------------------
-def data_handler1(notifName, notifParams):
+def data_handler0(notifName, notifParams):
     handle_data(notifName,notifParams, mymanagers[0])
 
-def data_handler2(notifName, notifParams):
+def data_handler1(notifName, notifParams):
     handle_data(notifName,notifParams, mymanagers[1])
 
-data_handlers = [data_handler1,data_handler2]
+def data_handler2(notifName, notifParams):
+    handle_data(notifName,notifParams, mymanagers[2])
+
+data_handlers = [data_handler0,data_handler1,data_handler2]
 
 
 #----------------------------------------------------
@@ -275,8 +280,8 @@ print( '===================================================\n')
 
 #===== connect to the manager
 
-ports = find_connected_devices(mymanagers[0])
-
+ports = find_connected_devices(mymanager)
+print ports
 result = []
 port_cntr = 0
 
@@ -285,12 +290,12 @@ try:
     print "Found Networks At :"
     for port in ports:
         try:
-            mymanagers[0].connect({'port': port.strip()})
-            res = mymanagers[0].dn_getNetworkConfig()
+            mymanager.connect({'port': port.strip()})
+            res = mymanager.dn_getNetworkConfig()
             port_cntr = 1 + port_cntr
             result.append(port.strip())
             print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
-            mymanagers[0].disconnect()
+            mymanager.disconnect()
 
         except:
             print "Something wrong happend here !!!!"
@@ -299,20 +304,26 @@ except:
     print "No Connected Dust Devices Found"
     os._exit(0)
 
+if port_cntr <= 0:
+    print "No Connected Dust Devices Found"
+    os._exit(0)
+
 #mymanager.disconnect()
 while(1):
-    sel = raw_input("Enter the network's number or 'a' to connect to all : \n")
+    sel = raw_input("Enter the network's number or 'a' to connect to all. Enter 'q' to quit : \n")
     if sel == 'a':
         portNum = 'a'
         break
+    if sel == 'q':
+        os._exit(0)
     try:
         portNum = int(sel)
         if portNum > 0 and portNum <= NUMBER_OF_NETWORKS:
             break
         else:
-            print("Please select a number between 1 and " + str(NUMBER_OF_NETWORKS))
+            print("Please select a number between 1 and " + str(port_cntr))
     except ValueError:
-       print("Please select a number between 1 and " + str(NUMBER_OF_NETWORKS))
+       print("Please select a number between 1 and " + str(port_cntr))
 
 #prepare the output file, write the first line of JSON      
 with open('datafile', 'w') as datafile:
@@ -340,15 +351,15 @@ if portNum == 'a':
         subscribers.append(subscriber)
 
 else:
-    connect_manager_serial(mymanagers[portNum], result[portNum-1] )
+    connect_manager_serial(mymanagers[portNum-1], result[portNum-1] )
     # subscribe to data notifications
-    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum])
+    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum-1])
     subscriber.start()
     subscriber.subscribe(
         notifTypes =    [
                             IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                         ],
-        fun =           data_handlers[portNum],
+        fun =           data_handlers[portNum-1],
         isRlbl =        True,
     )
 
@@ -366,7 +377,7 @@ returnVal = []
 #
 while continueAsking:
     try:
-        res = mymanagers[0].dn_getMoteConfig(currentMac,True)
+        res = mymanager.dn_getMoteConfig(currentMac,True)
         print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
 
     except:
