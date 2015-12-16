@@ -108,8 +108,6 @@ def find_connected_devices(mymanager):
             mes = s.read(10)
 
             if mes:
-        #        print("message recieved from port")
-        #        print mes
                 print "Found new Device at :", port
                 print "message recieved from port" 
                 #print mes.decode('unicode-escape')
@@ -143,7 +141,6 @@ def find_connected_devices(mymanager):
             objfile.write(r)
             objfile.write('\n')
 
-    
 
     return result
 
@@ -207,13 +204,13 @@ firstNotifHandled = False
 def handle_data(notifName, notifParams, mymanager, networkId):
 
     global firstNotifHandled
-    print "Health report recieved from network: " + str(networkId)
 
+    print "Health report recieved from network: " + str(networkId)
 
     mac        = FormatUtils.formatMacString(notifParams.macAddress)
     hrParser   = HrParser.HrParser()
-    hr    = hrParser.parseHr(notifParams.payload)
-    timestamp = datetime.datetime.utcnow()
+    hr         = hrParser.parseHr(notifParams.payload)
+    timestamp  = datetime.datetime.utcnow()
 
     try:
         res = mymanager.dn_getMoteConfig(notifParams.macAddress,False)
@@ -241,7 +238,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         #if a health notification is already in the datafile, remove the ']}' at the end of the file
         #and write a ',' so the json in datafile is formatted properly
         if firstNotifHandled:
-    
+
             datafile.seek(0, os.SEEK_END)
             pos = datafile.tell() - 1
 
@@ -286,12 +283,14 @@ print( '===================================================\n')
 #===== connect to the manager
 
 ports = find_connected_devices(mymanager)
+
 result = []
 port_cntr = 0
 
 try:
     # Checking the connected networks
     print "Found Networks At :"
+    objfile = open('obj/portList', 'w')
     for port in ports:
         try:
             mymanager.connect({'port': port.strip()})
@@ -300,6 +299,9 @@ try:
             result.append(port.strip())
             networkIds.append(res.networkId)
             print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
+
+            objfile.write(port.strip()+'\n')
+
             mymanager.disconnect()
 
         except:
@@ -309,11 +311,16 @@ except:
     print "No Connected Dust Devices Found"
     os._exit(0)
 
+
+objfile.close()
+
+
 if port_cntr <= 0:
     print "No Connected Dust Devices Found"
     os._exit(0)
 
 #mymanager.disconnect()
+
 while(1):
     sel = raw_input("Enter the network's number or 'a' to connect to all. Enter 'q' to quit : \n")
     if sel == 'a':
@@ -330,7 +337,7 @@ while(1):
     except ValueError:
        print("Please select a number between 1 and " + str(port_cntr))
 
-#prepare the output file, write the first line of JSON      
+#prepare the output file, write the first line of JSON
 with open('datafile', 'w') as datafile:
     datafile.write('{"Samples": [')
     datafile.write('\n')
@@ -394,7 +401,8 @@ while continueAsking:
 
 #raw_input("hit any key to quit\n")
 #mymanager.disconnect()
-#os._exit(0)
+os._exit(0)
+
 
 
 
