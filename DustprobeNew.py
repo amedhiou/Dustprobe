@@ -58,6 +58,7 @@ mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 #============================ Global Variables ================================
 networkIds = []
 reportQueue = Queue(maxsize=0)
+queueReady = True
 #============================ functions =======================================
 
 #----------------------------------------------------
@@ -138,11 +139,11 @@ def find_connected_devices(mymanager):
         pass
 
   
-    with open('obj/portList', 'w') as objfile:
-
-        for r in result:
-            objfile.write(r)
-            objfile.write('\n')
+#    with open('obj/portList', 'w') as objfile:
+#
+#       for r in result:
+#            objfile.write(r)
+#            objfile.write('\n')
 
 
     return result
@@ -181,9 +182,10 @@ def connect_manager_serial( mymanager , port ):
 
 
 def queueThread():
+    global queueReady
     while(True):
-        if not reportQueue.empty():
-            
+        if queueReady and not reportQueue.empty():
+            queueReady = False
             args = reportQueue.get()
             handle_data(args[0],args[1],args[2],args[3])
         sleep(1)
@@ -223,6 +225,7 @@ firstNotifHandled = False
 def handle_data(notifName, notifParams, mymanager, networkId):
 
     global firstNotifHandled
+    global queueReady
 
     print "Health report recieved from network: " + str(networkId)
 
@@ -292,6 +295,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         datafile.write('\n')
 
         print "health report handled successfully and added to datafile"
+        queueReady = True
 
     firstNotifHandled = True
 
