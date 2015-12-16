@@ -8,7 +8,10 @@ import re
 import serial
 import glob
 import time
+from time import sleep
 import datetime
+from Queue import Queue
+from threading import Thread
 
 if __name__ == "__main__":
     here = sys.path[0]
@@ -54,7 +57,7 @@ mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 
 #============================ Global Variables ================================
 networkIds = []
-
+reportQueue = Queue(maxsize=0)
 #============================ functions =======================================
 
 #----------------------------------------------------
@@ -177,6 +180,15 @@ def connect_manager_serial( mymanager , port ):
         os._exit(0)
 
 
+def queueThread():
+    while(True):
+        if not reportQueue.empty():
+            
+            args = reportQueue.get()
+            handle_data(args[0],args[1],args[2],args[3])
+        sleep(1)
+
+
 #-----------------------------------------------------
 # data_handlers
 # array of functions to be called by the subscriber on recieveing a health report.
@@ -184,13 +196,20 @@ def connect_manager_serial( mymanager , port ):
 # ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
 def data_handler0(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[0], networkIds[0])
+    #handle_data(notifName,notifParams, mymanagers[0], networkIds[0])
+
+    reportQueue.put([notifName,notifParams,mymanagers[0], networkIds[0]])
 
 def data_handler1(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[1], networkIds[1])
+    #handle_data(notifName,notifParams, mymanagers[1], networkIds[1])
+
+    reportQueue.put([notifName,notifParams,mymanagers[1], networkIds[1]])
 
 def data_handler2(notifName, notifParams):
-    handle_data(notifName,notifParams, mymanagers[2], networkIds[2])
+    #handle_data(notifName,notifParams, mymanagers[2], networkIds[2]
+
+    reportQueue.put([notifName,notifParams,mymanagers[2], networkIds[2]])
+
 
 data_handlers = [data_handler0,data_handler1,data_handler2]
 
@@ -275,6 +294,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         print "health report handled successfully and added to datafile"
 
     firstNotifHandled = True
+
 
 #============================ main ============================================
 
@@ -375,32 +395,11 @@ else:
         isRlbl =        True,
     )
 
+thread = Thread(target = queueThread)
+thread.setDaemon(True)
+thread.start()
+
 raw_input("Enter to EXIT : \n")
-os._exit(0)
-
-
-currentMac     = (0,0,0,0,0,0,0,0) # start getMoteConfig() iteration with the 0 MAC address
-continueAsking = True
-returnVal = []
-
-
-
-# the bellow subroutine should be done once every 15 minutes
-#
-while continueAsking:
-    try:
-        res = mymanager.dn_getMoteConfig(currentMac,True)
-        print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
-
-    except:
-        continueAsking = False
-    else:
-        if ((not res.isAP) and (res.state in [4,])):
-            returnVal.append(tuple(res.macAddress))
-        currentMac = res.macAddress
-
-#raw_input("hit any key to quit\n")
-#mymanager.disconnect()
 os._exit(0)
 
 
