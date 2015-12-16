@@ -243,7 +243,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         state  = res.state
     except:
         print "error connecting to mote"
-        moteId = -1
+        res.moteId = -1
         isAP   = "unknown"
         isRouting = "unknown"
         state  = "unknown"
@@ -254,7 +254,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         print "mac:" + mac
         print "moteid: " + str(res.moteId)
         print "payload: "
-        print str(hr)
+        print hrParser.formatHr(hr)
         
 
         #if a health notification is already in the datafile, remove the ']}' at the end of the file
