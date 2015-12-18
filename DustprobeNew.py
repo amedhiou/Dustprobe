@@ -243,7 +243,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         state  = res.state
     except:
         print "error connecting to mote"
-        res.moteId = -1
+        moteId = -1
         isAP   = "unknown"
         isRouting = "unknown"
         state  = "unknown"
@@ -252,7 +252,7 @@ def handle_data(notifName, notifParams, mymanager, networkId):
         
         print timestamp
         print "mac:" + mac
-        print "moteid: " + str(res.moteId)
+        print "moteid: " + str(moteId)
         print "payload: "
         print hrParser.formatHr(hr)
         
