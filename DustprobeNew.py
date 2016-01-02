@@ -1,6 +1,6 @@
 #!/uer/bin/python
 
-#============================ adjust path =====================================
+#============================ imports =====================================
 
 import sys
 import os
@@ -8,14 +8,15 @@ import re
 import serial
 import glob
 import time
-from time import sleep
+import requests
+import json 
+import yaml
+import getpass
 import datetime
+from time import sleep
 from Queue import Queue
 from threading import Thread
 
-if __name__ == "__main__":
-    here = sys.path[0]
-    sys.path.insert(0, os.path.join(here, '..', '..'))
 #============================ verify installation =============================
 
 from SmartMeshSDK import SmsdkInstallVerifier
@@ -31,6 +32,16 @@ if not goodToGo:
     input ("Press any button to exit")
     sys.exit(0)
 
+try:
+    session = requests.Session()
+except:
+    print ("Your installation does not allow this application to run:\n")
+    print ("Please install 'requests' for python")
+    input ("Press any button to exit")
+    sys.exit(0)
+
+
+
 #============================ imports =========================================
 
 import random
@@ -43,23 +54,24 @@ from SmartMeshSDK.IpMgrConnectorSerial  import IpMgrConnectorSerial
 from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 
 #============================ defines =========================================
+
 DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
 NUMBER_OF_NETWORKS = 3
+
+#============================ Global Variables ================================
+
+networkIds  = []
+reportQueue = Queue(maxsize=0)
+queueReady  = True
+queueBusy   = False
+session     = requests.Session()
 mymanagers = []
 for i in range(NUMBER_OF_NETWORKS):
     mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
 mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-#mymanager4               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-#mymanager5               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-#mymanager6               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-#mymanager7               = IpMgrConnectorSerial.IpMgrConnectorSerial()
-#mymanager8               = IpMgrConnectorSerial.IpMgrConnectorSerial()
 
-#============================ Global Variables ================================
-networkIds = []
-reportQueue = Queue(maxsize=0)
-queueReady = True
 #============================ functions =======================================
+
 
 #----------------------------------------------------
 # find_connected_devices(mymanager):
@@ -70,7 +82,6 @@ queueReady = True
 #     - TODO: Scanning should be implemented by
 #       listening to com/tty ports instead of writing
 #----------------------------------------------------
-
 def find_connected_devices(mymanager):
     """ Lists serial port names
         :raises EnvironmentError:
@@ -138,14 +149,6 @@ def find_connected_devices(mymanager):
         print "No connection history found"
         pass
 
-  
-#    with open('obj/portList', 'w') as objfile:
-#
-#       for r in result:
-#            objfile.write(r)
-#            objfile.write('\n')
-
-
     return result
 
 #----------------------------------------------------
@@ -156,7 +159,6 @@ def find_connected_devices(mymanager):
 #     - TODO: remove the hard coded serialport and
 #       add nessasary changes
 #----------------------------------------------------
-
 def connect_manager_serial( mymanager , port ):
     # This part checks for the list of available Dust Ports
     # The Com port is now set to default so no need to go through the list
@@ -179,16 +181,19 @@ def connect_manager_serial( mymanager , port ):
         ))
         raw_input('Aborting. Press Enter to close.')
         os._exit(0)
+ 
 
+def checkQueue():
+    global queueBusy
 
-def queueThread():
-    global queueReady
-    while(True):
-        if queueReady and not reportQueue.empty():
-            queueReady = False
-            args = reportQueue.get()
-            handle_data(args[0],args[1],args[2],args[3])
+    queueBusy = True
+    while(not reportQueue.empty()):
+        args = reportQueue.get()
+        timestamp  = datetime.datetime.utcnow()
+        handle_data(args[0],args[1],args[2],args[3],timestamp)
         sleep(1)
+
+    queueBusy = False
 
 
 #-----------------------------------------------------
@@ -197,214 +202,415 @@ def queueThread():
 # This way each subscriber can use the correct manager, which is required for some data
 # ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
-def data_handler0(notifName, notifParams):
-    #handle_data(notifName,notifParams, mymanagers[0], networkIds[0])
-
+def data_handler0(notifName, notifParams):    
     reportQueue.put([notifName,notifParams,mymanagers[0], networkIds[0]])
+    if not queueBusy:
+        checkQueue()
 
 def data_handler1(notifName, notifParams):
-    #handle_data(notifName,notifParams, mymanagers[1], networkIds[1])
-
     reportQueue.put([notifName,notifParams,mymanagers[1], networkIds[1]])
+    if not queueBusy:
+        checkQueue()
+
 
 def data_handler2(notifName, notifParams):
-    #handle_data(notifName,notifParams, mymanagers[2], networkIds[2]
-
     reportQueue.put([notifName,notifParams,mymanagers[2], networkIds[2]])
-
+    if not queueBusy:
+        checkQueue()
 
 data_handlers = [data_handler0,data_handler1,data_handler2]
 
 
+#-----------------------------------------------------------------------
+# sendJSONtoServer(dataBaseJson)
+#   - send dataBaseJson to the dustlab server to be placed in the database
+#   - dataBaseJson must be a properly formatted JSON 
+#------------------------------------------------------------------------
+def sendJSONtoServer(dataBaseJson):
+    try:
+        
+        response = session.post(
+                'http://dustlab-dustcloud.rhcloud.com/dustlab/test/',
+                data={"sample":dataBaseJson}
+            )
+
+        r = response.json()
+        if r["SUCCESS"] == True:
+            print "success adding to database\n"
+            return
+        else:
+            print "failed to put into database"
+    except:
+        pass
 #----------------------------------------------------
 # handle_data(notifName, notifParams):
 #     - This function parses the Health reports recieved and puts the data into a JSON file for upload
 #     - TODO: the data should be sent to the database as soon as it's recieved
 #----------------------------------------------------
 firstNotifHandled = False
-def handle_data(notifName, notifParams, mymanager, networkId):
+def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
 
-    global firstNotifHandled
-    global queueReady
 
-    print "Health report recieved from network: " + str(networkId)
+    print notifName, "recieved from network: " + str(networkID)
 
-    mac        = FormatUtils.formatMacString(notifParams.macAddress)
-    hrParser   = HrParser.HrParser()
-    hr         = hrParser.parseHr(notifParams.payload)
-    timestamp  = datetime.datetime.utcnow()
+    ############# NotifHealthReport ###################
+    if notifName == "notifHealthReport":
 
+        global firstNotifHandled
+        global queueReady
+
+        mac        = FormatUtils.formatMacString(notifParams.macAddress)
+        hrParser   = HrParser.HrParser()
+        hr         = hrParser.parseHr(notifParams.payload)
+        
+
+        try:
+            res = mymanager.dn_getMoteConfig(notifParams.macAddress,False)
+            print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
+            moteId = res.moteId
+            isAP   = res.isAP
+            isRouting = res.isRouting
+            state  = res.state
+        except:
+            print "error connecting to mote"
+            moteId = -1
+            isAP   = "unknown"
+            isRouting = "unknown"
+            state  = "unknown"
+            
+        with open('datafile', 'ar+') as datafile:
+            
+            print timestamp
+            print "mac:" + mac
+            print "moteid: " + str(moteId)
+            print "payload: "
+            print hrParser.formatHr(hr)
+            
+
+            #if a health notification is already in the datafile, remove the ']}' at the end of the file
+            #and write a ',' so the json in datafile is formatted properly
+            if firstNotifHandled:
+
+                datafile.seek(0, os.SEEK_END)
+                pos = datafile.tell() - 1
+
+                while pos > 0 and datafile.read(1) != "\n":
+                    pos -= 1
+                    datafile.seek(pos, os.SEEK_SET)
+
+                if pos > 0:
+                    datafile.seek(pos, os.SEEK_SET)
+                    datafile.truncate()
+                    datafile.write(',\n')
+
+            #write the health report to the datafile
+            datafile.write("\n{'Time':"     + str(timestamp) + ",")
+            datafile.write('\n')
+            datafile.write("'networkID' : " + str(networkID) + ",")
+            datafile.write('\n')
+            datafile.write("'MAC' : "       + mac            + ",")
+            datafile.write('\n')
+            datafile.write("'moteID' : "    + str(moteId)    + ",")
+            datafile.write('\n')
+            datafile.write("'isAP' : "      + str(isAP)      + ",")
+            datafile.write('\n')
+            datafile.write("'isRouting' : " + str(isRouting) + ",")
+            datafile.write('\n')
+            datafile.write("'state' : "     + str(state)     + ",")
+            datafile.write('\n')
+            datafile.write(str(hr))
+            datafile.write('}')
+            datafile.write('\n')
+            datafile.write(']}')
+            datafile.write('\n')
+
+        print "health report handled successfully and added to datafile\n"
+        
+        dataBaseJsonString  = "{'sample' : "
+        dataBaseJsonString += "{'Time': "      + "'" + str(timestamp) + "' ,"
+        dataBaseJsonString += "'networkID' : " + str(networkID) + ","
+        dataBaseJsonString += "'MAC' : "       + mac            + ","
+        dataBaseJsonString += "'moteID' : "    + str(moteId)    + ","
+        dataBaseJsonString += "'isAP' : "      + str(isAP)      + ","
+        dataBaseJsonString += "'isRouting' : " + str(isRouting) + ","
+        dataBaseJsonString += "'state' : "     + str(state)     + ","
+        dataBaseJsonString += "'hr' : "        + str(hr)
+        dataBaseJsonString += '}}'
+
+
+        dataBaseYaml = yaml.load(dataBaseJsonString)
+        dataBaseJson = json.dumps(dataBaseYaml)
+
+        sendJSONtoServer(dataBaseJson)
+
+        firstNotifHandled = True
+
+
+def remoteLogin():
+
+    #attempt to login
+    while(1):
+        username = raw_input("User name:")
+        password = getpass.getpass(prompt="password:")
+
+        # log in session
+        data = {"username":username, "password":password}
+        response = session.post(
+            'http://dustlab-dustcloud.rhcloud.com/dustlab/remoteLogin/',
+            data=data
+        )
+
+        r = response.json()
+        if r["LOGIN"] == True:
+            break
+
+        else:
+            print "incorrect username/password"
+
+def checkConnectedPorts(mymanager, ports):
+
+    result = []
     try:
-        res = mymanager.dn_getMoteConfig(notifParams.macAddress,False)
-        print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
-        moteId = res.moteId
-        isAP   = res.isAP
-        isRouting = res.isRouting
-        state  = res.state
+        # Checking the connected networks
+        print "Found Networks At :"
+        objfile = open('obj/portList', 'w')
+        port_cntr = 0
+        for port in ports:
+            try:
+                mymanager.connect({'port': port.strip()})
+                res = mymanager.dn_getNetworkConfig()
+                port_cntr = port_cntr + 1
+                result.append(port.strip())
+                networkIds.append(res.networkId)
+                print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
+
+                objfile.write(port.strip()+'\n')
+
+                mymanager.disconnect()
+
+            except:
+                print "Unable to connect to port " + str(port.strip())
+                
     except:
-        print "error connecting to mote"
-        moteId = -1
-        isAP   = "unknown"
-        isRouting = "unknown"
-        state  = "unknown"
-        
-    with open('datafile', 'ar+') as datafile:
-        
-        print timestamp
-        print "mac:" + mac
-        print "moteid: " + str(moteId)
-        print "payload: "
-        print hrParser.formatHr(hr)
-        
+        print "No Connected Dust Devices Found"
+        os._exit(0)
 
-        #if a health notification is already in the datafile, remove the ']}' at the end of the file
-        #and write a ',' so the json in datafile is formatted properly
-        if firstNotifHandled:
 
-            datafile.seek(0, os.SEEK_END)
-            pos = datafile.tell() - 1
+    objfile.close()
 
-            while pos > 0 and datafile.read(1) != "\n":
-                pos -= 1
-                datafile.seek(pos, os.SEEK_SET)
 
-            if pos > 0:
-                datafile.seek(pos, os.SEEK_SET)
-                datafile.truncate()
-                datafile.write(',\n')
+    if port_cntr <= 0:
+        print "No Connected Dust Devices Found"
+        os._exit(0)
 
-        #write the health report to the datafile
-        datafile.write("\n{'TIME':" + str(timestamp) + ",")
-        datafile.write('\n')
-        datafile.write("'networkId' : " + str(networkId) + ",")
-        datafile.write('\n')
-        datafile.write("'MAC' : " + mac + ",")
-        datafile.write('\n')
-        datafile.write("'moteID' : " + str(moteId) + ",")
-        datafile.write('\n')
-        datafile.write("'isAP' : " + str(isAP) + ",")
-        datafile.write('\n')
-        datafile.write("'isRouting' : " + str(isRouting) + ",")
-        datafile.write('\n')
-        datafile.write("'state' : " + str(state) + ",")
-        datafile.write('\n')
-        datafile.write(str(hr))
-        datafile.write('}')
-        datafile.write('\n')
-        datafile.write(']}')
+    return result
+
+#repeatedly ask the user for valid input to select a port to connect to
+#input of 'a' connects to all
+#inpurt of 'q' quits
+def getUsersSelection(port_cntr):
+    while(1):
+        sel = raw_input("Enter the network's number or 'a' to connect to all. Enter 'q' to quit : \n")
+        if sel == 'a':
+            portNum = 'a'
+            break
+        if sel == 'q':
+            os._exit(0)
+        try:
+            portNum = int(sel)
+            if portNum > 0 and portNum <= NUMBER_OF_NETWORKS:
+                break
+            else:
+                print("Please select a number between 1 and " + str(port_cntr))
+        except ValueError:
+           print("Please select a number between 1 and " + str(port_cntr))
+
+    return portNum
+
+#prepare the output file, write the first line of JSON
+#if it doesnt exist create it.
+def prepareDataFile():
+    
+    with open('datafile', 'w') as datafile:
+        datafile.write('{"Samples": [')
         datafile.write('\n')
 
-        print "health report handled successfully and added to datafile"
-        queueReady = True
+#connect to the port(s) selected by the user
+#and start the subscriber listening for health reports (NOTIFHEALTHREPORT)
+#if portNum is 'a' connect to all available devices
+def connectToPort(portNum, connectedPorts):
 
-    firstNotifHandled = True
+    port_cntr = len(connectedPorts)
+
+    if portNum == 'a':
+
+        subscribers = []
+        for p in range(port_cntr):
+            connect_manager_serial(mymanagers[p],connectedPorts[p] )
+
+            # subscribe to data notifications
+            subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[p])
+            subscriber.start()
+
+            subscriber.subscribe(
+            notifTypes =    [
+                                IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                            ],
+            fun =           data_handlers[p],
+            isRlbl =        True,
+            )
+
+            subscribers.append(subscriber)
+
+    else:
+        connect_manager_serial(mymanagers[portNum-1], connectedPorts[portNum-1] )
+        # subscribe to data notifications
+        subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum-1])
+        subscriber.start()
+
+
+        subscriber.subscribe(
+            notifTypes =    [
+                                IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                                IpMgrSubscribe.IpMgrSubscribe.NOTIFEVENT,
+                            ],
+            fun =           data_handlers[portNum-1],
+            isRlbl =        True,
+        )
+
+
+
+
+def testThread():
+    global printflag
+    global quitflag
+    global askflag
+    global warningflag
+    
+    myman = mymanagers[0]
+    mac = [0, 23, 13, 0, 0, 48, 10, 185]
+    mac = [0, 23, 13, 0, 0, 96, 6, 240]
+
+    macAddress = [0,0,0,0,0,0,0,0]
+
+    while(not quitflag):
+
+        if askflag:
+            macAddress = [0,0,0,0,0,0,0,0]
+            while(1):
+                try:
+                    res = myman.dn_getMoteConfig(macAddress,True)
+                    RC = res.RC
+                    moteId = res.moteId
+                    isAP   = res.isAP
+                    isRouting = res.isRouting
+                    state  = res.state
+                    macAddress = res.macAddress
+
+                    if not isAP and printflag:
+                        print "mac", macAddress,
+                        print "\t",
+                        print "moteid ", moteId,
+                        print "Routing",isRouting,
+                        print "AP",isAP,
+                        if state != 4:
+                            print "state change",state,
+                        else:
+                            print "state",state,
+                        if RC != 0:
+                            print "RC change",RC
+                        else:
+                            print "RC",RC
+
+                    if warningflag:
+                        if state != 4:
+                            print mac," state change",state
+                        if RC != 0:
+                            print mac," RC change",RC
+
+                except:
+                    break
+                    print ""
+
+
+
+            
+
+
+
+
+
+
 
 
 #============================ main ============================================
 
-print( '===================================================\n')
+if __name__ == "__main__":
 
-#===== connect to the manager
+    here = sys.path[0]
+    sys.path.insert(0, os.path.join(here, '..', '..'))
 
-ports = find_connected_devices(mymanager)
+    #athenticate user to access database
+    remoteLogin()
 
-result = []
-port_cntr = 0
+    #connect to the manager
+    #ports: list of all found ports on this device
+    ports = find_connected_devices(mymanager)
+    connectedPorts = checkConnectedPorts(mymanager, ports)
 
-try:
-    # Checking the connected networks
-    print "Found Networks At :"
-    objfile = open('obj/portList', 'w')
-    for port in ports:
-        try:
-            mymanager.connect({'port': port.strip()})
-            res = mymanager.dn_getNetworkConfig()
-            port_cntr = 1 + port_cntr
-            result.append(port.strip())
-            networkIds.append(res.networkId)
-            print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
+    #repeatedly ask the user for valid input to select a port to connect to
+    portNum = getUsersSelection(len(connectedPorts))
 
-            objfile.write(port.strip()+'\n')
+    #gets data file ready, prints first line of JSON to the file
+    prepareDataFile()
 
-            mymanager.disconnect()
+    #connect to the port(s) selected by the user
+    #and start the subscriber subcribed to 
+    connectToPort(portNum, connectedPorts)
 
-        except:
-            print "Something wrong happend here !!!!"
-            pass
-except:
-    print "No Connected Dust Devices Found"
-    os._exit(0)
+    
+    '''
 
 
-objfile.close()
+    quitflag = False
+    printflag = False
+    askflag = False
+    warningflag = False
+
+    for i in range(1):
+        testthread = Thread(target = testThread)
+        testthread.setDaemon(True)
+        testthread.start()
+        pass
 
 
-if port_cntr <= 0:
-    print "No Connected Dust Devices Found"
-    os._exit(0)
 
-#mymanager.disconnect()
+    raw_input("start thread : \n")
 
-while(1):
-    sel = raw_input("Enter the network's number or 'a' to connect to all. Enter 'q' to quit : \n")
-    if sel == 'a':
-        portNum = 'a'
-        break
-    if sel == 'q':
-        os._exit(0)
-    try:
-        portNum = int(sel)
-        if portNum > 0 and portNum <= NUMBER_OF_NETWORKS:
+    while(1):
+
+        sel = raw_input("Enter to change flag : \n")
+
+        if sel == 'q':
+            quitflag = True
             break
-        else:
-            print("Please select a number between 1 and " + str(port_cntr))
-    except ValueError:
-       print("Please select a number between 1 and " + str(port_cntr))
+        if sel == 'e':
+            printflag = False
+        if sel == 'w':
+            printflag = True
+        if sel == 'a':
+            askflag = True
+        if sel == 's':
+            askflag = False
+        if sel == 'p':
+            warningflag = True
+        if sel == 'o':
+            warningflag = False
 
-#prepare the output file, write the first line of JSON
-with open('datafile', 'w') as datafile:
-    datafile.write('{"Samples": [')
-    datafile.write('\n')
+    '''
 
-if portNum == 'a':
-
-    subscribers = []
-    for p in range(port_cntr):
-        connect_manager_serial(mymanagers[p],result[p] )
-
-        # subscribe to data notifications
-        subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[p])
-        subscriber.start()
-
-        subscriber.subscribe(
-        notifTypes =    [
-                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                        ],
-        fun =           data_handlers[p],
-        isRlbl =        True,
-        )
-
-        subscribers.append(subscriber)
-
-else:
-    connect_manager_serial(mymanagers[portNum-1], result[portNum-1] )
-    # subscribe to data notifications
-    subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum-1])
-    subscriber.start()
-    subscriber.subscribe(
-        notifTypes =    [
-                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
-                        ],
-        fun =           data_handlers[portNum-1],
-        isRlbl =        True,
-    )
-
-thread = Thread(target = queueThread)
-thread.setDaemon(True)
-thread.start()
-
-raw_input("Enter to EXIT : \n")
-os._exit(0)
+    raw_input("Enter to EXIT : \n")
+    os._exit(0)
 
 
 
