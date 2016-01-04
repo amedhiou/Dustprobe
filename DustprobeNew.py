@@ -277,6 +277,20 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             isAP   = "unknown"
             isRouting = "unknown"
             state  = "unknown"
+
+        dataBaseJsonString  = ""
+        dataBaseJsonString += "{'Time': "      + "'" + str(timestamp) + "' ,"
+        dataBaseJsonString += "'networkID' : " + str(networkID) + ","
+        dataBaseJsonString += "'MAC' : "       + mac            + ","
+        dataBaseJsonString += "'moteID' : "    + str(moteId)    + ","
+        dataBaseJsonString += "'isAP' : "      + str(isAP)      + ","
+        dataBaseJsonString += "'isRouting' : " + str(isRouting) + ","
+        dataBaseJsonString += "'state' : "     + str(state)     + ","
+        dataBaseJsonString += "'hr' : "        + str(hr)
+        dataBaseJsonString += '}'
+
+        dataBaseYaml = yaml.load(dataBaseJsonString)
+        dataBaseJson = json.dumps(dataBaseYaml)
             
         with open('datafile', 'ar+') as datafile:
             
@@ -304,6 +318,7 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
                     datafile.write(',\n')
 
             #write the health report to the datafile
+            '''
             datafile.write("\n{'Time':"     + str(timestamp) + ",")
             datafile.write('\n')
             datafile.write("'networkID' : " + str(networkID) + ",")
@@ -323,23 +338,16 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             datafile.write('\n')
             datafile.write(']}')
             datafile.write('\n')
+            '''
+
+            datafile.write('\n' + str(dataBaseJson))
+            datafile.write('\n')
+            datafile.write(']}')
+            datafile.write('\n')
 
         print "health report handled successfully and added to datafile\n"
         
-        dataBaseJsonString  = "{'sample' : "
-        dataBaseJsonString += "{'Time': "      + "'" + str(timestamp) + "' ,"
-        dataBaseJsonString += "'networkID' : " + str(networkID) + ","
-        dataBaseJsonString += "'MAC' : "       + mac            + ","
-        dataBaseJsonString += "'moteID' : "    + str(moteId)    + ","
-        dataBaseJsonString += "'isAP' : "      + str(isAP)      + ","
-        dataBaseJsonString += "'isRouting' : " + str(isRouting) + ","
-        dataBaseJsonString += "'state' : "     + str(state)     + ","
-        dataBaseJsonString += "'hr' : "        + str(hr)
-        dataBaseJsonString += '}}'
 
-
-        dataBaseYaml = yaml.load(dataBaseJsonString)
-        dataBaseJson = json.dumps(dataBaseYaml)
 
         sendJSONtoServer(dataBaseJson)
 
@@ -570,7 +578,6 @@ if __name__ == "__main__":
 
     
     '''
-
 
     quitflag = False
     printflag = False
