@@ -13,6 +13,7 @@ import json
 import yaml
 import getpass
 import datetime
+import csv
 from time import sleep
 from Queue import Queue
 from threading import Thread
@@ -65,7 +66,8 @@ reportQueue = Queue(maxsize=0)
 queueReady  = True
 queueBusy   = False
 session     = requests.Session()
-mymanagers = []
+mymanagers  = []
+moteDict    = {}
 for i in range(NUMBER_OF_NETWORKS):
     mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
 mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
@@ -260,13 +262,14 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         global queueReady
 
         mac        = FormatUtils.formatMacString(notifParams.macAddress)
+        mac = mac.upper()
         hrParser   = HrParser.HrParser()
         hr         = hrParser.parseHr(notifParams.payload)
         
 
         try:
             res = mymanager.dn_getMoteConfig(notifParams.macAddress,False)
-            print "MoteID: ", res.moteId,", MAC: ",res.macAddress,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
+            print "MoteID: ", res.moteId,", MAC: ",mac,", AP:", res.isAP,", State:", res.state, ", Routing:", res.isRouting
             moteId = res.moteId
             isAP   = res.isAP
             isRouting = res.isRouting
@@ -278,6 +281,36 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             isRouting = "unknown"
             state  = "unknown"
 
+        try:
+            settingsDict = moteDict[str(mac)]
+        except KeyError:
+            print "macAddress: " + str(mac) + " not found in settings"
+
+        if 'settingsDict' not in locals():
+            try:
+                settingsDict = moteDict[str(moteId)]
+            except KeyError:
+                print  "moteId: " + str(moteId) + " not found in settings"
+
+
+        
+        if 'settingsDict' in locals():
+            if settingsDict['moteId'] != str(moteId):
+                print "warning: moteId (" + settingsDict['moteId'] + ") in settings does not match actual moteId: " + str(moteId)
+            x = settingsDict['x']
+            y = settingsDict['y']
+            z = settingsDict['z']
+            substrate = settingsDict['substrate']
+            antenna   = settingsDict['antenna']
+        else:
+            x = '-'
+            y = '-'
+            z = '-'
+            substrate = 'unknown'
+            antenna   = 'unknown'
+
+        print "x ", x, "y ", x, "z ", z, "substrate: ", substrate, "antenna: ", antenna
+
         dataBaseJsonString  = ""
         dataBaseJsonString += "{'Time': "      + "'" + str(timestamp) + "' ,"
         dataBaseJsonString += "'networkID' : " + str(networkID) + ","
@@ -286,6 +319,14 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         dataBaseJsonString += "'isAP' : "      + str(isAP)      + ","
         dataBaseJsonString += "'isRouting' : " + str(isRouting) + ","
         dataBaseJsonString += "'state' : "     + str(state)     + ","
+
+        if 'settingsDict' in locals():
+            dataBaseJsonString += "'x' : "         + str(x)         + ","
+            dataBaseJsonString += "'y' : "         + str(y)         + ","
+            dataBaseJsonString += "'z' : "         + str(z)         + ","
+            dataBaseJsonString += "'substrate' : " + str(substrate) + ","
+            dataBaseJsonString += "'antenna' : "   + str(antenna)   + ","
+
         dataBaseJsonString += "'hr' : "        + str(hr)
         dataBaseJsonString += '}'
 
@@ -374,6 +415,39 @@ def remoteLogin():
 
         else:
             print "incorrect username/password"
+
+def loadSettings():
+
+    with open ('Settings/settings.csv', 'r') as settings:
+        reader = csv.reader(settings, delimiter=',', quotechar='"')
+
+        for row in reader:
+            settingsDict = {}
+            key = "none"
+    
+            moteId     = row[0]
+            if moteId:
+                settingsDict['moteId'] = moteId
+                key = moteId
+            macAddress = row[1]
+            macAddress = macAddress.upper()
+            if macAddress:
+                settingsDict['macAddress'] = macAddress
+                key = macAddress
+
+            settingsDict['x'] = row[2]
+            settingsDict['y'] = row[3]
+            settingsDict['z'] = row[4]
+
+            settingsDict['substrate'] = row[5]
+            settingsDict['antenna']   = row[6]
+
+            moteDict[key] = settingsDict
+
+            
+        
+
+
 
 def checkConnectedPorts(mymanager, ports):
 
@@ -561,6 +635,9 @@ if __name__ == "__main__":
     #athenticate user to access database
     remoteLogin()
 
+    #load the settings file from ./Settings/settings
+    loadSettings()
+
     #connect to the manager
     #ports: list of all found ports on this device
     ports = find_connected_devices(mymanager)
@@ -584,7 +661,7 @@ if __name__ == "__main__":
     askflag = False
     warningflag = False
 
-    for i in range(1):
+    for i in range(100):
         testthread = Thread(target = testThread)
         testthread.setDaemon(True)
         testthread.start()
