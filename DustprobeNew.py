@@ -5,10 +5,8 @@
 import sys
 import os
 import re
-import serial
 import glob
 import time
-import requests
 import json 
 import yaml
 import getpass
@@ -17,6 +15,11 @@ import csv
 from time import sleep
 from Queue import Queue
 from threading import Thread
+from time import strftime
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__) + '/' + '../lib'))
+from lib import serial
+from lib import requests
 
 #============================ verify installation =============================
 
@@ -54,6 +57,7 @@ from SmartMeshSDK.ApiDefinition         import IpMgrDefinition
 from SmartMeshSDK.IpMgrConnectorSerial  import IpMgrConnectorSerial
 from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 
+
 #============================ defines =========================================
 
 DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
@@ -66,6 +70,7 @@ reportQueue = Queue(maxsize=0)
 queueReady  = True
 queueBusy   = False
 session     = requests.Session()
+database_session = dict()
 mymanagers  = []
 moteDict    = {}
 for i in range(NUMBER_OF_NETWORKS):
@@ -327,11 +332,17 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             dataBaseJsonString += "'substrate' : " + str(substrate) + ","
             dataBaseJsonString += "'antenna' : "   + str(antenna)   + ","
 
-        dataBaseJsonString += "'hr' : "        + str(hr)
+        dataBaseJsonString += "'hr' : "          + str(hr) +  ","
+        dataBaseJsonString += "'session_name': " + str(database_session['session_name']) + ","
+        dataBaseJsonString += "'start_time': "   + "'" + str(database_session['start_time']) + "'"
         dataBaseJsonString += '}'
 
+        print "trying to yaml"
+        print dataBaseJsonString
         dataBaseYaml = yaml.load(dataBaseJsonString)
+        print "yamled successfully"
         dataBaseJson = json.dumps(dataBaseYaml)
+        print "dumped successfully"
             
         with open('datafile', 'ar+') as datafile:
             
@@ -619,6 +630,17 @@ def testThread():
             
 
 
+def startDatabaseSession():
+
+    session_name = raw_input("Enter a name for this session: \n")
+    start_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+
+    database_session['session_name'] = session_name
+    database_session['start_time']   = start_time
+
+
+
 
 
 
@@ -637,6 +659,9 @@ if __name__ == "__main__":
 
     #load the settings file from ./Settings/settings
     loadSettings()
+
+    #ask the user for a session name
+    startDatabaseSession()
 
     #connect to the manager
     #ports: list of all found ports on this device
