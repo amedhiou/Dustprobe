@@ -8,7 +8,6 @@ import re
 import glob
 import time
 import json 
-import yaml
 import getpass
 import datetime
 import csv
@@ -20,6 +19,7 @@ from time import strftime
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + '/' + '../lib'))
 from lib import serial
 from lib import requests
+from lib import yaml
 
 #============================ verify installation =============================
 
