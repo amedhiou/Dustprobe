@@ -23,18 +23,18 @@ from lib import yaml
 
 #============================ verify installation =============================
 
-from SmartMeshSDK import SmsdkInstallVerifier
-(goodToGo,reason) = SmsdkInstallVerifier.verifyComponents(
-    [
-        SmsdkInstallVerifier.PYTHON,
-        SmsdkInstallVerifier.PYSERIAL,
-    ]
-)
-if not goodToGo:
-    print ("Your installation does not allow this application to run:\n")
-    print (reason)
-    input ("Press any button to exit")
-    sys.exit(0)
+#from SmartMeshSDK import SmsdkInstallVerifier
+#(goodToGo,reason) = SmsdkInstallVerifier.verifyComponents(
+#    [
+#        SmsdkInstallVerifier.PYTHON,
+#        SmsdkInstallVerifier.PYSERIAL,
+#    ]
+#)
+#if not goodToGo:
+#    print ("Your installation does not allow this application to run:\n")
+#    print (reason)
+#    input ("Press any button to exit")
+#    sys.exit(0)
 
 try:
     session = requests.Session()
