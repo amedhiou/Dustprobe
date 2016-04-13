@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+sys.path.insert(0, '../../')
 import threading
 import traceback
 
@@ -11,7 +12,7 @@ from SmartMeshSDK.ApiException import ConnectionError, \
                                       CommandError
 
 try:
-    import serial
+    from lib import serial
 except ImportError:
     output  = ''
     output += 'Could not load the serial module.\n'
