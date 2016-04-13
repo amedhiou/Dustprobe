@@ -16,7 +16,7 @@ from Queue import Queue
 from threading import Thread
 from time import strftime
 
-sys.path.append(os.path.abspath(os.path.dirname(__file__) + '/' + '../lib'))
+#sys.path.append(os.path.abspath(os.path.dirname(__file__) + '/' + '../lib'))
 from lib import serial
 from lib import requests
 from lib import yaml
