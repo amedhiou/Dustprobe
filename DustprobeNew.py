@@ -103,7 +103,7 @@ def find_connected_devices(mymanager):
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
         ports = glob.glob('/dev/tty[A-Za-z]*')
 
-    elif sys.platform('darwin'):
+    elif sys.platform.startswith('darwin'):
         ports = glob.glob('/dev/tty.*')
 
     else:
@@ -337,12 +337,8 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         dataBaseJsonString += "'start_time': "   + "'" + str(database_session['start_time']) + "'"
         dataBaseJsonString += '}'
 
-        print "trying to yaml"
-        print dataBaseJsonString
         dataBaseYaml = yaml.load(dataBaseJsonString)
-        print "yamled successfully"
         dataBaseJson = json.dumps(dataBaseYaml)
-        print "dumped successfully"
             
         with open('datafile', 'ar+') as datafile:
             
