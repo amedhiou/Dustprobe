@@ -260,6 +260,9 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
 
     print notifName, "recieved from network: " + str(networkID)
 
+    for p in notifParams:
+        print p
+
     ############# NotifHealthReport ###################
     if notifName == "notifHealthReport":
 
@@ -308,11 +311,11 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             substrate = settingsDict['substrate']
             antenna   = settingsDict['antenna']
         else:
-            x = '-'
-            y = '-'
-            z = '-'
-            substrate = 'unknown'
-            antenna   = 'unknown'
+            x = '0'
+            y = '0'
+            z = '0'
+            substrate = '0'
+            antenna   = '0'
 
         print "x ", x, "y ", x, "z ", z, "substrate: ", substrate, "antenna: ", antenna
 
@@ -451,6 +454,8 @@ def loadSettings():
 
             moteDict[key] = settingsDict
 
+
+
             
         
 
@@ -569,6 +574,18 @@ def connectToPort(portNum, connectedPorts):
 
 
 
+def scanMotes():
+
+    macAddress = [0,0,0,0,0,0,0,0]
+   
+    try:
+    res = myman.dn_getMoteConfig(macAddress,True)
+    RC = res.RC
+    moteId = res.moteId
+    isAP   = res.isAP
+    isRouting = res.isRouting
+    state  = res.state
+    macAddress = res.macAddress
 
 def testThread():
     global printflag
@@ -634,10 +651,6 @@ def startDatabaseSession():
 
     database_session['session_name'] = session_name
     database_session['start_time']   = start_time
-
-
-
-
 
 
 
