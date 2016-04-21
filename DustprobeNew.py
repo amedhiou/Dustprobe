@@ -345,7 +345,7 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         dataBaseYaml = yaml.load(dataBaseJsonString)
         dataBaseJson = json.dumps(dataBaseYaml)
             
-        with open('datafile', 'ar+') as datafile:
+        with open('datafile', 'ab+') as datafile:
             
             print timestamp
             print "mac:" + mac
@@ -471,10 +471,11 @@ def checkConnectedPorts(mymanager, ports):
         print "Found Networks At :"
         objfile = open('obj/portList', 'w')
         port_cntr = 0
+        i = 0
         for port in ports:
             try:
-                mymanager.connect({'port': port.strip()})
-                res = mymanager.dn_getNetworkConfig()
+                mymanagers[i].connect({'port': port.strip()})
+                res = mymanagers[i].dn_getNetworkConfig()
                 port_cntr = port_cntr + 1
                 result.append(port.strip())
                 networkIds.append(res.networkId)
@@ -482,12 +483,15 @@ def checkConnectedPorts(mymanager, ports):
 
                 objfile.write(port.strip()+'\n')
 
-                mymanager.disconnect()
+                mymanagers[i].disconnect()
 
-            except:
+            except Exception as e:
+                mymanagers[i].disconnect()
                 print "Unable to connect to port " + str(port.strip())
+                print e
                 
-    except:
+    except Exception as e:
+        print e
         print "No Connected Dust Devices Found"
         os._exit(0)
 
