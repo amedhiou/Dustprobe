@@ -61,7 +61,7 @@ from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 #============================ defines =========================================
 
 DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
-NUMBER_OF_NETWORKS = 3
+NUMBER_OF_NETWORKS = 6
 
 #============================ Global Variables ================================
 
@@ -484,6 +484,7 @@ def checkConnectedPorts(mymanager, ports):
                 objfile.write(port.strip()+'\n')
 
                 mymanagers[i].disconnect()
+                i = i + 1
 
             except Exception as e:
                 mymanagers[i].disconnect()
