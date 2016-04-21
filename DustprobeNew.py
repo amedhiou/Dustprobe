@@ -294,6 +294,7 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         except KeyError:
             print "macAddress: " + str(mac) + " not found in settings"
 
+        '''
         if 'settingsDict' not in locals():
             try:
                 settingsDict = moteDict[str(moteId)]
@@ -311,11 +312,12 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
             substrate = settingsDict['substrate']
             antenna   = settingsDict['antenna']
         else:
-            x = '0'
-            y = '0'
-            z = '0'
-            substrate = '0'
-            antenna   = '0'
+            '''
+        x = '0'
+        y = '0'
+        z = '0'
+        substrate = '0'
+        antenna   = '0'
 
         print "x ", x, "y ", x, "z ", z, "substrate: ", substrate, "antenna: ", antenna
 
@@ -328,12 +330,12 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
         dataBaseJsonString += "'isRouting' : " + str(isRouting) + ","
         dataBaseJsonString += "'state' : "     + str(state)     + ","
 
-        if 'settingsDict' in locals():
-            dataBaseJsonString += "'x' : "         + str(x)         + ","
-            dataBaseJsonString += "'y' : "         + str(y)         + ","
-            dataBaseJsonString += "'z' : "         + str(z)         + ","
-            dataBaseJsonString += "'substrate' : " + str(substrate) + ","
-            dataBaseJsonString += "'antenna' : "   + str(antenna)   + ","
+        
+        dataBaseJsonString += "'x' : "         + str(x)         + ","
+        dataBaseJsonString += "'y' : "         + str(y)         + ","
+        dataBaseJsonString += "'z' : "         + str(z)         + ","
+        dataBaseJsonString += "'substrate' : " + str(substrate) + ","
+        dataBaseJsonString += "'antenna' : "   + str(antenna)   + ","
 
         dataBaseJsonString += "'hr' : "          + str(hr) +  ","
         dataBaseJsonString += "'session_name': " + str(database_session['session_name']) + ","
@@ -574,19 +576,6 @@ def connectToPort(portNum, connectedPorts):
 
 
 
-def scanMotes():
-
-    macAddress = [0,0,0,0,0,0,0,0]
-   
-    try:
-    res = myman.dn_getMoteConfig(macAddress,True)
-    RC = res.RC
-    moteId = res.moteId
-    isAP   = res.isAP
-    isRouting = res.isRouting
-    state  = res.state
-    macAddress = res.macAddress
-
 def testThread():
     global printflag
     global quitflag
@@ -667,7 +656,7 @@ if __name__ == "__main__":
     remoteLogin()
 
     #load the settings file from ./Settings/settings
-    loadSettings()
+    #loadSettings()
 
     #ask the user for a session name
     startDatabaseSession()
