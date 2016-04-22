@@ -12,7 +12,8 @@ import getpass
 import datetime
 import csv
 from time import sleep
-from Queue import Queue
+import Queue
+import threading
 from threading import Thread
 from time import strftime
 
@@ -61,21 +62,24 @@ from SmartMeshSDK.IpMgrConnectorMux     import IpMgrSubscribe, IpMgrConnectorMux
 #============================ defines =========================================
 
 DEFAULT_MgrSERIALPORT    = '/dev/ttyUSB3'
-NUMBER_OF_NETWORKS = 6
+NUMBER_OF_NETWORKS = 3
 
 #============================ Global Variables ================================
 
 networkIds  = []
-reportQueue = Queue(maxsize=0)
+reportQueue = Queue.Queue(maxsize=0)
+errorQueue  = Queue.Queue(maxsize=0)
 queueReady  = True
 queueBusy   = False
 session     = requests.Session()
 database_session = dict()
 mymanagers  = []
 moteDict    = {}
-for i in range(NUMBER_OF_NETWORKS):
-    mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
-mymanager               = IpMgrConnectorSerial.IpMgrConnectorSerial()
+mymanager   = IpMgrConnectorSerial.IpMgrConnectorSerial()
+portsManagerDict = {}
+indexPortsDict   = {}
+globalmacAddress = [0,0,0,0,0,0,0,0]
+managerAddress   = []
 
 #============================ functions =======================================
 
@@ -158,6 +162,12 @@ def find_connected_devices(mymanager):
 
     return result
 
+def createManagers(ports):
+
+    for p in ports:
+        mymanagers.append(IpMgrConnectorSerial.IpMgrConnectorSerial())
+
+
 #----------------------------------------------------
 # connect_manager_serial( mymanager , ports ):
 #     - This function gets the list of available Dust
@@ -178,7 +188,7 @@ def connect_manager_serial( mymanager , port ):
     """
     serialport = DEFAULT_MgrSERIALPORT # in my set up its /dev/ttyUSB3
     try:
-        mymanager.connect({'port': port})
+        mymanager.connect({'port': port, 'errorQueue':errorQueue})
         print "connected to manager at : ", port
     except Exception as err:
         print('failed to connect to manager at {0}, error ({1})\n{2}'.format(
@@ -209,21 +219,25 @@ def checkQueue():
 # This way each subscriber can use the correct manager, which is required for some data
 # ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
-def data_handler0(notifName, notifParams):    
-    reportQueue.put([notifName,notifParams,mymanagers[0], networkIds[0]])
+def data_handler0(notifName, notifParams): 
+    pm = portsManagerDict[indexPortsDict[0]]   
+    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
     if not queueBusy:
         checkQueue()
 
 def data_handler1(notifName, notifParams):
-    reportQueue.put([notifName,notifParams,mymanagers[1], networkIds[1]])
+    pm = portsManagerDict[indexPortsDict[1]]
+    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
     if not queueBusy:
         checkQueue()
 
 
 def data_handler2(notifName, notifParams):
-    reportQueue.put([notifName,notifParams,mymanagers[2], networkIds[2]])
+    pm = portsManagerDict[indexPortsDict[2]]
+    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
     if not queueBusy:
         checkQueue()
+
 
 data_handlers = [data_handler0,data_handler1,data_handler2]
 
@@ -260,8 +274,10 @@ def handle_data(notifName, notifParams, mymanager, networkID, timestamp):
 
     print notifName, "recieved from network: " + str(networkID)
 
-    for p in notifParams:
-        print p
+    if notifName == "eventMoteJoin":
+
+        print "mote's macAddress: ", notifParams.macAddress
+        
 
     ############# NotifHealthReport ###################
     if notifName == "notifHealthReport":
@@ -463,31 +479,28 @@ def loadSettings():
 
 
 
-def checkConnectedPorts(mymanager, ports):
+def checkConnectedPorts():
 
-    result = []
+
     try:
         # Checking the connected networks
         print "Found Networks At :"
         objfile = open('obj/portList', 'w')
         port_cntr = 0
-        i = 0
         for port in ports:
             try:
-                mymanagers[i].connect({'port': port.strip()})
-                res = mymanagers[i].dn_getNetworkConfig()
-                port_cntr = port_cntr + 1
-                result.append(port.strip())
-                networkIds.append(res.networkId)
-                print " network ", port_cntr," found at ", result[port_cntr-1], " with NetId ", res.networkId
-
+                mymanagers[port_cntr].connect({'port': port.strip()})
+                res = mymanagers[port_cntr].dn_getNetworkConfig()
+                
+                print " network ", port_cntr + 1," found at ",  port.strip(), " with NetId ", res.networkId
+                portsManagerDict[port.strip()] = {'manager':mymanagers[port_cntr],'network':res.networkId,'data_handler':data_handlers[port_cntr]}
+                indexPortsDict[port_cntr] = port.strip()
                 objfile.write(port.strip()+'\n')
-
-                mymanagers[i].disconnect()
-                i = i + 1
+                mymanagers[port_cntr].disconnect()
+                port_cntr = port_cntr + 1
 
             except Exception as e:
-                mymanagers[i].disconnect()
+                mymanagers[port_cntr].disconnect()
                 print "Unable to connect to port " + str(port.strip())
                 print e
                 
@@ -504,12 +517,14 @@ def checkConnectedPorts(mymanager, ports):
         print "No Connected Dust Devices Found"
         os._exit(0)
 
-    return result
+
 
 #repeatedly ask the user for valid input to select a port to connect to
 #input of 'a' connects to all
 #inpurt of 'q' quits
-def getUsersSelection(port_cntr):
+def getUsersSelection():
+
+    port_cntr = len(portsManagerDict)
     while(1):
         sel = raw_input("Enter the network's number or 'a' to connect to all. Enter 'q' to quit : \n")
         if sel == 'a':
@@ -526,7 +541,7 @@ def getUsersSelection(port_cntr):
         except ValueError:
            print("Please select a number between 1 and " + str(port_cntr))
 
-    return portNum
+    return portNum - 1
 
 #prepare the output file, write the first line of JSON
 #if it doesnt exist create it.
@@ -539,34 +554,37 @@ def prepareDataFile():
 #connect to the port(s) selected by the user
 #and start the subscriber listening for health reports (NOTIFHEALTHREPORT)
 #if portNum is 'a' connect to all available devices
-def connectToPort(portNum, connectedPorts):
+def connectToPorts(portNum):
 
-    port_cntr = len(connectedPorts)
+    
 
     if portNum == 'a':
 
         subscribers = []
-        for p in range(port_cntr):
-            connect_manager_serial(mymanagers[p],connectedPorts[p] )
+        for p in portsManagerDict:
+
+            connect_manager_serial(portsManagerDict[p]['manager'],p )
 
             # subscribe to data notifications
-            subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[p])
+            subscriber = IpMgrSubscribe.IpMgrSubscribe(portsManagerDict[p]['manager'])
             subscriber.start()
 
             subscriber.subscribe(
             notifTypes =    [
                                 IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                             ],
-            fun =           data_handlers[p],
+            fun =           portsManagerDict[p]['data_handler'],
             isRlbl =        True,
             )
 
             subscribers.append(subscriber)
 
     else:
-        connect_manager_serial(mymanagers[portNum-1], connectedPorts[portNum-1] )
+
+        pm = portsManagerDict[indexPortsDict[portNum]]
+        connect_manager_serial(pm['manager'], indexPortsDict[portNum] )
         # subscribe to data notifications
-        subscriber = IpMgrSubscribe.IpMgrSubscribe(mymanagers[portNum-1])
+        subscriber = IpMgrSubscribe.IpMgrSubscribe(pm['manager'])
         subscriber.start()
 
 
@@ -575,65 +593,28 @@ def connectToPort(portNum, connectedPorts):
                                 IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
                                 IpMgrSubscribe.IpMgrSubscribe.NOTIFEVENT,
                             ],
-            fun =           data_handlers[portNum-1],
+            fun =           pm['data_handler'],
             isRlbl =        True,
         )
 
+def connectToPort(port):
 
 
-def testThread():
-    global printflag
-    global quitflag
-    global askflag
-    global warningflag
-    
-    myman = mymanagers[0]
-    mac = [0, 23, 13, 0, 0, 48, 10, 185]
-    mac = [0, 23, 13, 0, 0, 96, 6, 240]
-
-    macAddress = [0,0,0,0,0,0,0,0]
-
-    while(not quitflag):
-
-        if askflag:
-            macAddress = [0,0,0,0,0,0,0,0]
-            while(1):
-                try:
-                    res = myman.dn_getMoteConfig(macAddress,True)
-                    RC = res.RC
-                    moteId = res.moteId
-                    isAP   = res.isAP
-                    isRouting = res.isRouting
-                    state  = res.state
-                    macAddress = res.macAddress
-
-                    if not isAP and printflag:
-                        print "mac", macAddress,
-                        print "\t",
-                        print "moteid ", moteId,
-                        print "Routing",isRouting,
-                        print "AP",isAP,
-                        if state != 4:
-                            print "state change",state,
-                        else:
-                            print "state",state,
-                        if RC != 0:
-                            print "RC change",RC
-                        else:
-                            print "RC",RC
-
-                    if warningflag:
-                        if state != 4:
-                            print mac," state change",state
-                        if RC != 0:
-                            print mac," RC change",RC
-
-                except:
-                    break
-                    print ""
+    pm = portsManagerDict[port]
+    connect_manager_serial(pm['manager'], indexPortsDict[portNum] )
+    # subscribe to data notifications
+    subscriber = IpMgrSubscribe.IpMgrSubscribe(pm['manager'])
+    subscriber.start()
 
 
-
+    subscriber.subscribe(
+        notifTypes =    [
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                            IpMgrSubscribe.IpMgrSubscribe.NOTIFEVENT,
+                        ],
+        fun =           pm['data_handler'],
+        isRlbl =        True,
+    )
             
 
 
@@ -647,8 +628,101 @@ def startDatabaseSession():
     database_session['start_time']   = start_time
 
 
+def disconnectManagers(port):
+    pm = portsManagerDict[port]
+    try:
+        pm['manager'].disconnect()
+        pm['manager'] = IpMgrConnectorSerial.IpMgrConnectorSerial()
+    except Exception as e:
+        print e
+
+def connect(portNum):
+    connectToPorts(portNum)
+
+def resetManager(portNum, arg):
+    global globalmacAddress
+    pm = portsManagerDict[indexPortsDict[portNum]]
+
+    try:
+        res = pm['manager'].dn_reset(arg,globalmacAddress)
+        print res
+
+    except Exception as e:
+        print e 
+
+def scanConnections(portNum):
+    global globalmacAddress
+    global managerAddress
+#    disconnectManagers()
+#    connectToPort(portNum, connectedPorts)
+    pm = portsManagerDict[indexPortsDict[portNum]]
+    try:
+        res = pm['manager'].dn_getMoteConfig(globalmacAddress,True)
+
+        RC = res.RC
+        moteId = res.moteId
+        isAP   = res.isAP
+        isRouting = res.isRouting
+        state  = res.state
+        globalmacAddress = res.macAddress
+
+        print "mac", globalmacAddress,
+        print "\t",
+        print "moteid ", moteId,
+        print "Routing",isRouting,
+        print "AP",isAP
+
+        if isAP:
+            managerAddress = globalmacAddress
+    except Exception as e:
+        print e
+        globalmacAddress=[0,0,0,0,0,0,0,0]
+
+def checkErrorQueue():
+    global errorQueue
+
+    print "checking for errors"
+    try:
+        if not errorQueue.empty():
+            error = errorQueue.get()
+            print error
+        else:
+            print "no errors"
+    except Exception as e:
+        print e
 
 
+
+class ErrorQueueWorker(threading.Thread):
+    """
+    """
+
+    def __init__(self, err_q):
+        super(ErrorQueueWorker, self).__init__()
+        self.err_q = err_q
+        self.stoprequest = threading.Event()
+
+    def run(self):
+
+        while not self.stoprequest.isSet():
+            try:
+                err = self.err_q.get(True, 0.05)
+                port = err['port']
+
+                print "disconnecting connection at ", port
+                disconnectManagers(port)
+                print "reconnecting connection at ", port
+                connectToPort(port)
+
+            except Queue.Empty:
+                continue
+            except Exception as e:
+                print e
+                print err
+
+    def join(self, timeout=None):
+        self.stoprequest.set()
+        super(errorQueueWorker, self).join(timeout)
 
 #============================ main ============================================
 
@@ -669,57 +743,52 @@ if __name__ == "__main__":
     #connect to the manager
     #ports: list of all found ports on this device
     ports = find_connected_devices(mymanager)
-    connectedPorts = checkConnectedPorts(mymanager, ports)
+    createManagers(ports)
+    checkConnectedPorts()
 
     #repeatedly ask the user for valid input to select a port to connect to
-    portNum = getUsersSelection(len(connectedPorts))
+    portNum = getUsersSelection()
 
     #gets data file ready, prints first line of JSON to the file
     prepareDataFile()
 
     #connect to the port(s) selected by the user
     #and start the subscriber subcribed to 
-    connectToPort(portNum, connectedPorts)
+    connectToPorts(portNum)
 
     
-    '''
+    errorQueueWorker = ErrorQueueWorker(errorQueue)
+    errorQueueWorker.start()
 
-    quitflag = False
-    printflag = False
-    askflag = False
-    warningflag = False
+    globalmacAddress = [0,0,0,0,0,0,0,0]
+    port = indexPortsDict[0]
+    while(True):
 
-    for i in range(100):
-        testthread = Thread(target = testThread)
-        testthread.setDaemon(True)
-        testthread.start()
-        pass
-
-
-
-    raw_input("start thread : \n")
-
-    while(1):
-
-        sel = raw_input("Enter to change flag : \n")
+        if managerAddress == globalmacAddress:
+            print " ---- MANAGERS ADDRESS found: ", globalmacAddress
+            sel = raw_input("Enter s to scan, m to reset mote/manager, c to connect, 'e' check error, 'q' to quit : \n")
+            arg = 0
+        else:
+            print "mote address: ", globalmacAddress
+            sel = raw_input("Enter s to scan, m to reset mote/manager, c to connect, 'e' check error, 'q' to quit : \n")
+            arg = 2
 
         if sel == 'q':
-            quitflag = True
-            break
-        if sel == 'e':
-            printflag = False
-        if sel == 'w':
-            printflag = True
-        if sel == 'a':
-            askflag = True
-        if sel == 's':
-            askflag = False
-        if sel == 'p':
-            warningflag = True
-        if sel == 'o':
-            warningflag = False
+            break;
 
-    '''
+        if sel == 'c':
+            connect(portNum)
+        if sel == 'm':
+            resetManager(portNum, arg)
+        if sel == 's':
+            scanConnections(portNum)
+        if sel == 'd':
+            disconnectManagers(port)
+        if sel == 'e':
+            checkErrorQueue()
+        if sel == 'p':
+            errorQueue.put("SS")
+            print errorQueue.qsize()
 
     raw_input("Enter to EXIT : \n")
     os._exit(0)

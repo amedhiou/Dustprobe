@@ -3,6 +3,7 @@
 import sys
 sys.path.insert(0, '../../')
 import threading
+from Queue import Queue
 import traceback
 
 import Crc
@@ -150,6 +151,9 @@ class Hdlc(threading.Thread):
                                     output = "@Hdlc: {0}".format(err)
                                     log.error(output)
                                     print output
+                                    if hasattr(self, '_ERRORQUEUE'):
+
+                                        self._ERRORQUEUE.put({'error':output,'port':self.comPort})
                         else:
                             output = "@Hdlc: received hdlc frame too short"
                             log.error(output)
@@ -183,8 +187,23 @@ class Hdlc(threading.Thread):
     
     #======================== public ==========================================
     
-    def connect(self,comPort,baudrate=_BAUDRATE):
-        self.comPort         = comPort
+    def connect(self,connectParams):
+
+        if 'port' in connectParams:
+            self.comPort         = connectParams['port']
+        else:
+            output = "'port' entry required in connection parameters"
+            log.warning(output)
+            raise ConnectionError(output)
+
+        if 'baudrate' in connectParams:
+            baudrate = connectParams['baudrate']
+        else:
+            baudrate = self._BAUDRATE
+
+        if 'errorQueue' in connectParams:
+            self._ERRORQUEUE = connectParams['errorQueue']
+
         try:
             self.pyserialHandler = serial.Serial(self.comPort,baudrate=baudrate)
             self.pyserialHandler.setRTS(False)

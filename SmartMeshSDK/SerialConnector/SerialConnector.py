@@ -62,6 +62,7 @@ class SerialConnector(ApiConnector):
     #======================== public ==========================================
     
     def connect(self, connectParams):
+        
         if 'port' not in connectParams:
             output = "'port' entry required in connection parameters"
             log.error(output)
@@ -72,10 +73,7 @@ class SerialConnector(ApiConnector):
             self.hdlc            = Hdlc.Hdlc(self._hdlcRxCb,
                                              self._hdlcConnectCb)
             # connect HDLC module to serial Port
-            if 'baudrate' in connectParams:
-                self.hdlc.connect(connectParams['port'],baudrate=connectParams['baudrate'])
-            else:
-                self.hdlc.connect(connectParams['port'])
+            self.hdlc.connect(connectParams)
             # connect the parent class
             ApiConnector.connect(self)
     
