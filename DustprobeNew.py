@@ -211,8 +211,8 @@ def checkQueue():
     queueBusy = True
     while(not reportQueue.empty()):
         args = reportQueue.get()
-        timestamp  = datetime.datetime.utcnow()
-        handle_data(args[0],args[1],args[2],args[3],timestamp)
+        
+        handle_data(args[0],args[1],args[2],args[3],args[4])
         sleep(1)
 
     queueBusy = False
@@ -225,23 +225,26 @@ def checkQueue():
 # ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
 def data_handler0(notifName, notifParams): 
-    pm = portsManagerDict[connectedPorts[0]]   
-    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
-    if not queueBusy:
-        checkQueue()
+    try:
+        print "handle"
+        timestamp = datetime.datetime.utcnow()
+        print timestamp
+        print connectedPorts
+        print connectedPorts[0]
+        print portsManagerDict[connectedPorts[0]]
+        pm = portsManagerDict[connectedPorts[0]]   
+        handle_data(notifName,notifParams,pm['manager'], pm['network'],datetime.datetime.utcnow())
+    except Exception as e:
+        print e
 
 def data_handler1(notifName, notifParams):
     pm = portsManagerDict[connectedPorts[1]]
-    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
-    if not queueBusy:
-        checkQueue()
+    handle_data(notifName,notifParams,pm['manager'], pm['network'],datetime.datetime.utcnow())
 
 
 def data_handler2(notifName, notifParams):
     pm = portsManagerDict[connectedPorts[2]]
-    reportQueue.put([notifName,notifParams,pm['manager'], pm['network']])
-    if not queueBusy:
-        checkQueue()
+    handle_data(notifName,notifParams,pm['manager'], pm['network'],datetime.datetime.utcnow())
 
 
 data_handlers = [data_handler0,data_handler1,data_handler2]
@@ -587,6 +590,7 @@ def connectToPorts(connectedPorts, portNum):
             subscriber.subscribe(
             notifTypes =    [
                                 IpMgrSubscribe.IpMgrSubscribe.NOTIFHEALTHREPORT,
+                                IpMgrSubscribe.IpMgrSubscribe.NOTIFEVENT,
                             ],
             fun =           data_handlers[p],
             isRlbl =        True,
@@ -596,7 +600,6 @@ def connectToPorts(connectedPorts, portNum):
 
             res = mymanagers[p].dn_getNetworkConfig()
             portsManagerDict[connectedPorts[p]] = {'manager':mymanagers[p],'network':res.networkId,'data_handler':data_handlers[p]}
-            indexPortsDict[p] = connectedPorts[p]
 
     else:
 
@@ -617,7 +620,6 @@ def connectToPorts(connectedPorts, portNum):
 
         res = mymanagers[portNum].dn_getNetworkConfig()
         portsManagerDict[connectedPorts[portNum]] = {'manager':mymanagers[portNum],'network':res.networkId,'data_handler':data_handlers[portNum]}
-        indexPortsDict[portNum] = connectedPorts[portNum]
 
 def connectToPort(port):
 
@@ -672,6 +674,17 @@ def resetManager(port, arg):
     except Exception as e:
         print e 
 
+def getlog(port):
+    global globalmacAddress
+
+    pm = portsManagerDict[port]
+    try:
+
+        res = pm['manager'].dn_getLog(globalmacAddress)
+        print res 
+    except:
+        pass
+
 def scanConnections(port):
     global globalmacAddress
     global managerAddress
@@ -700,23 +713,16 @@ def scanConnections(port):
         print e
         globalmacAddress=[0,0,0,0,0,0,0,0]
 
-def checkErrorQueue():
-    global errorQueue
 
-    print "checking for errors"
-    try:
-        if not errorQueue.empty():
-            error = errorQueue.get()
-            print error
-        else:
-            print "no errors"
-    except Exception as e:
-        print e
 
 
 
 class ErrorQueueWorker(threading.Thread):
     """
+    Error Queue Worker
+    checks for errors thrown by the SmartMeshSDK and placed into errorQueue
+    currently only handles @HDLC unexpected manager_hello error.
+    on recieving that error, disconnect and reconnect the manager that recieved it
     """
 
     def __init__(self, err_q):
@@ -803,14 +809,13 @@ if __name__ == "__main__":
 
         if managerAddress == globalmacAddress:
             print " ---- MANAGERS ADDRESS found: ", globalmacAddress
-            sel = raw_input("Enter s to scan, m to reset mote/manager, c to connect, 'e' check error, 'q' to quit : \n")
             arg = 0
+
         else:
             print "mote address: ", globalmacAddress
-            sel = raw_input("Enter s to scan, m to reset mote/manager, c to connect, 'e' check error, 'q' to quit : \n")
             arg = 2
 
-
+        sel = raw_input("Enter s to scan, m to reset mote/manager, c to connect mote/manager, 'd' to disconnect mote/manager, 'q' to quit : \n")
         if is_number(sel):
             sel = int(sel)
 
@@ -832,11 +837,8 @@ if __name__ == "__main__":
             scanConnections(selectedPort)
         if sel == 'd':
             disconnectManagers(selectedPort)
-        if sel == 'e':
-            checkErrorQueue()
-        if sel == 'p':
-            errorQueue.put("SS")
-            print errorQueue.qsize()
+        if sel == 'l':
+            getlog(selectedPort)
 
     raw_input("Enter to EXIT : \n")
     os._exit(0)
