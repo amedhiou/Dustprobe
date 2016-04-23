@@ -225,17 +225,9 @@ def checkQueue():
 # ~~ I feel like there is a more elegant way to do this, using lamda functions or something. This works though, ill look into it later
 #-----------------------------------------------------
 def data_handler0(notifName, notifParams): 
-    try:
-        print "handle"
-        timestamp = datetime.datetime.utcnow()
-        print timestamp
-        print connectedPorts
-        print connectedPorts[0]
-        print portsManagerDict[connectedPorts[0]]
-        pm = portsManagerDict[connectedPorts[0]]   
-        handle_data(notifName,notifParams,pm['manager'], pm['network'],datetime.datetime.utcnow())
-    except Exception as e:
-        print e
+    pm = portsManagerDict[connectedPorts[0]]   
+    handle_data(notifName,notifParams,pm['manager'], pm['network'],datetime.datetime.utcnow())
+
 
 def data_handler1(notifName, notifParams):
     pm = portsManagerDict[connectedPorts[1]]
