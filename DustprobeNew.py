@@ -17,6 +17,7 @@ import threading
 from threading import Thread
 from time import strftime
 import collections
+import pickle
 
 
 #sys.path.append(os.path.abspath(os.path.dirname(__file__) + '/' + '../lib'))
@@ -733,6 +734,8 @@ class ErrorQueueWorker(threading.Thread):
                 disconnectManagers(port)
                 print "reconnecting connection at ", port
                 connectToPort(port)
+
+            
 
             except Queue.Empty:
                 continue
